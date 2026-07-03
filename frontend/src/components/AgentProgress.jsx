@@ -4,6 +4,7 @@ export const AGENT_LABELS = {
   financials: "Financial Statements",
   technicals: "Technical Analysis",
   valuation: "Valuation",
+  portfolio: "Portfolio Fit",
   recommendation: "Recommendation",
 };
 

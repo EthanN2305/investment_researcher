@@ -22,3 +22,7 @@ dist/
 # Logs
 *.log
 recommendations_log.jsonl
+
+# Database (Phase 3)
+*.db
+*.sqlite3

@@ -1,10 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { answerQuestion, startResearch, subscribeToRun } from "./api.js";
+import {
+  answerQuestion,
+  clearAuth,
+  getAuth,
+  startResearch,
+  subscribeToRun,
+} from "./api.js";
 import AgentProgress from "./components/AgentProgress.jsx";
+import AuthForm from "./components/AuthForm.jsx";
+import PortfolioPanel from "./components/PortfolioPanel.jsx";
+import PreferencesForm from "./components/PreferencesForm.jsx";
 import QuestionCard from "./components/QuestionCard.jsx";
 import ReportView from "./components/ReportView.jsx";
 
 export default function App() {
+  const [view, setView] = useState("research"); // "research" | "portfolio"
+  const [user, setUser] = useState(() => getAuth()); // {token, email} | null
+
   const [ticker, setTicker] = useState("");
   const [depth, setDepth] = useState("deep"); // "quick" | "deep" | "" (planner asks)
   const [status, setStatus] = useState("idle"); // idle | running | question | done | error
@@ -17,6 +29,12 @@ export default function App() {
   const closeRef = useRef(null);
 
   useEffect(() => () => closeRef.current?.(), []);
+
+  function signOut() {
+    clearAuth();
+    setUser(null);
+    setView("research");
+  }
 
   function handleEvent(event) {
     switch (event.type) {
@@ -75,6 +93,8 @@ export default function App() {
         setStatus("error");
       });
     } catch (err) {
+      // A stale token is cleared inside the API client — reflect that here.
+      if (!getAuth()) setUser(null);
       setError(err.message || "Something went wrong.");
       setStatus("error");
     }
@@ -99,55 +119,117 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>AI Investment Research Analyst</h1>
+        <div className="header-top">
+          <h1>AI Investment Research Analyst</h1>
+          <div className="auth-status">
+            {user ? (
+              <>
+                <span className="auth-email">{user.email}</span>
+                <button type="button" className="linklike" onClick={signOut}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="linklike"
+                onClick={() => setView("portfolio")}
+              >
+                Sign in
+              </button>
+            )}
+          </div>
+        </div>
         <p className="tagline">
           A planner coordinates news, SEC financials, valuation, and technical
-          agents — then synthesizes a sourced, confidence-scored report.
+          agents — then synthesizes a sourced, confidence-scored report
+          {user ? ", personalized to your portfolio." : "."}
         </p>
+        <nav className="tabs" aria-label="Views">
+          <button
+            type="button"
+            className={view === "research" ? "tab on" : "tab"}
+            onClick={() => setView("research")}
+          >
+            Research
+          </button>
+          <button
+            type="button"
+            className={view === "portfolio" ? "tab on" : "tab"}
+            onClick={() => setView("portfolio")}
+          >
+            My Portfolio
+          </button>
+        </nav>
       </header>
 
-      <form className="search" onSubmit={onSubmit}>
-        <input
-          aria-label="Stock ticker"
-          placeholder="e.g. AAPL"
-          value={ticker}
-          onChange={(e) => setTicker(e.target.value)}
-          maxLength={12}
-          autoFocus
-        />
-        <select
-          aria-label="Research depth"
-          value={depth}
-          onChange={(e) => setDepth(e.target.value)}
-        >
-          <option value="deep">Deep dive</option>
-          <option value="quick">Quick check</option>
-          <option value="">Let the planner ask</option>
-        </select>
-        <button type="submit" disabled={busy || !ticker.trim()}>
-          {busy ? "Researching…" : "Research"}
-        </button>
-      </form>
+      {view === "portfolio" ? (
+        user ? (
+          <>
+            <PortfolioPanel />
+            <PreferencesForm />
+          </>
+        ) : (
+          <AuthForm
+            onAuthed={() => {
+              setUser(getAuth());
+              setView("portfolio");
+            }}
+          />
+        )
+      ) : (
+        <>
+          <form className="search" onSubmit={onSubmit}>
+            <input
+              aria-label="Stock ticker"
+              placeholder="e.g. AAPL"
+              value={ticker}
+              onChange={(e) => setTicker(e.target.value)}
+              maxLength={12}
+              autoFocus
+            />
+            <select
+              aria-label="Research depth"
+              value={depth}
+              onChange={(e) => setDepth(e.target.value)}
+            >
+              <option value="deep">Deep dive</option>
+              <option value="quick">Quick check</option>
+              <option value="">Let the planner ask</option>
+            </select>
+            <button type="submit" disabled={busy || !ticker.trim()}>
+              {busy ? "Researching…" : "Research"}
+            </button>
+          </form>
 
-      {busy && <AgentProgress agents={agents} />}
+          {user && status === "idle" && (
+            <p className="personalize-note">
+              Signed in — reports will include a "how this fits your portfolio"
+              section based on your holdings and preferences.
+            </p>
+          )}
 
-      {status === "question" && question && (
-        <QuestionCard
-          question={question.question}
-          options={question.options}
-          onAnswer={onAnswer}
-          busy={answering}
-        />
+          {busy && <AgentProgress agents={agents} />}
+
+          {status === "question" && question && (
+            <QuestionCard
+              question={question.question}
+              options={question.options}
+              onAnswer={onAnswer}
+              busy={answering}
+            />
+          )}
+
+          {status === "error" && (
+            <div className="error" role="alert">
+              <strong>Could not generate report.</strong>
+              <p>{error}</p>
+            </div>
+          )}
+
+          {status === "done" && report && <ReportView report={report} />}
+        </>
       )}
-
-      {status === "error" && (
-        <div className="error" role="alert">
-          <strong>Could not generate report.</strong>
-          <p>{error}</p>
-        </div>
-      )}
-
-      {status === "done" && report && <ReportView report={report} />}
 
       <footer className="footer">
         Informational research only — not investment advice.

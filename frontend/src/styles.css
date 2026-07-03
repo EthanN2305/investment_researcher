@@ -466,3 +466,360 @@ body {
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* --- Phase 3: header auth + tabs ------------------------------------------- */
+
+.header-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.auth-status {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.auth-email {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.linklike {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.linklike:hover {
+  text-decoration: underline;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.tab.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.personalize-note {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin: -0.75rem 0 1rem;
+}
+
+/* --- Phase 3: auth form ------------------------------------------------------ */
+
+.auth-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem 1.4rem;
+  margin: 1.5rem 0;
+  max-width: 26rem;
+}
+
+.auth-card h3 {
+  margin: 0 0 0.35rem;
+}
+
+.auth-blurb {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.auth-form input {
+  padding: 0.65rem 0.85rem;
+  font-size: 0.95rem;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.auth-form button {
+  padding: 0.65rem 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.auth-form button:disabled {
+  opacity: 0.5;
+}
+
+.auth-error {
+  color: var(--red);
+  font-size: 0.88rem;
+  margin: 0.6rem 0 0;
+}
+
+.auth-switch {
+  margin-top: 0.8rem;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* --- Phase 3: portfolio & preferences panels ---------------------------------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.25rem 0;
+}
+
+.panel h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.holding-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.holding-form input {
+  padding: 0.55rem 0.8rem;
+  font-size: 0.92rem;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.holding-form input:first-child {
+  text-transform: uppercase;
+  width: 7rem;
+}
+
+.holding-form input[type="number"] {
+  width: 9.5rem;
+}
+
+.holding-form button {
+  padding: 0.55rem 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.holding-form button:disabled {
+  opacity: 0.5;
+}
+
+.holdings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.holdings-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.holdings-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.ticker-cell {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.sector-cell {
+  color: var(--muted);
+}
+
+.total-row td {
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: none;
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+}
+
+.remove-btn:hover {
+  color: var(--red);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+.prefs-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.prefs-form label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  max-width: 20rem;
+}
+
+.prefs-form select {
+  padding: 0.55rem 0.7rem;
+  font-size: 0.92rem;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sector-picker {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sector-picker legend {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+  padding: 0;
+}
+
+.sector-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip.on {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.prefs-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.prefs-actions button {
+  padding: 0.55rem 1.1rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.prefs-actions button:disabled {
+  opacity: 0.5;
+}
+
+.saved-note {
+  color: var(--green);
+  font-size: 0.88rem;
+}
+
+/* --- Phase 3: "how this fits your portfolio" section --------------------------- */
+
+.portfolio-fit {
+  background: rgba(62, 207, 142, 0.06);
+  border: 1px solid rgba(62, 207, 142, 0.45);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin: 1.25rem 0;
+}
+
+.portfolio-fit h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.portfolio-fit-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #0f1420;
+  background: var(--green);
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  letter-spacing: 0.5px;
+}
+
+.portfolio-fit-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0 0 0.4rem;
+}
