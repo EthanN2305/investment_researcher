@@ -124,3 +124,61 @@ class NewsItem(BaseModel):
     source: str | None = None
     published_at: str | None = None
     summary: str | None = None
+
+
+# --- Phase 3: accounts, portfolios, preferences -------------------------------
+
+RISK_TOLERANCES = ("low", "medium", "high")
+LEANS = ("growth", "value", "balanced")
+HORIZONS = ("short", "medium", "long")
+
+
+class SignupRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    email: str
+
+
+class HoldingIn(BaseModel):
+    """Create/update payload for one position."""
+
+    ticker: str = Field(..., min_length=1, max_length=12)
+    quantity: float = Field(..., gt=0)
+    cost_basis: float = Field(..., ge=0, description="Per-share cost basis.")
+
+
+class HoldingOut(HoldingIn):
+    id: int
+    sector: str | None = None
+
+
+class PreferencesIn(BaseModel):
+    """Explicitly stated preferences (Phase 3 uses nothing inferred)."""
+
+    risk_tolerance: str | None = Field(None, description="'low'|'medium'|'high'")
+    sector_interests: list[str] = Field(default_factory=list)
+    growth_value_lean: str | None = Field(None, description="'growth'|'value'|'balanced'")
+    time_horizon: str | None = Field(None, description="'short'|'medium'|'long'")
+
+
+class PreferencesOut(PreferencesIn):
+    pass
+
+
+class PortfolioContext(BaseModel):
+    """Snapshot of a user's holdings + preferences, passed into the graph so
+    the Portfolio Manager Agent never touches the DB directly."""
+
+    user_email: str
+    holdings: list[HoldingOut] = Field(default_factory=list)
+    preferences: PreferencesOut | None = None

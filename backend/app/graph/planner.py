@@ -70,7 +70,10 @@ def planner_node(state: ResearchState) -> dict:
         a = str(answer).lower()
         lens = next((l for l in _LENSES if l in a), "balanced")
 
-    plan = PLANS[depth]
+    plan = list(PLANS[depth])
+    # Phase 3: a logged-in, personalized run adds the Portfolio Manager Agent.
+    if state.get("portfolio_context"):
+        plan.append("portfolio")
     events.emit(run_id, {"type": "plan", "ticker": ticker, "depth": depth,
                          "lens": lens, "agents": plan + ["recommendation"]})
     events.emit(run_id, {"type": "status", "agent": "planner", "state": "done",

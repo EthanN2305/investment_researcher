@@ -23,6 +23,9 @@ class ResearchState(TypedDict, total=False):
     depth: str  # "quick" | "deep" (planner resolves if absent)
     lens: str | None  # "growth" | "value" | "balanced"
     plan: list[str]  # agent ids the planner chose to run
+    # Phase 3: snapshot of the logged-in user's holdings + preferences
+    # (a PortfolioContext dump). None/absent → generic, non-personalized run.
+    portfolio_context: dict | None
     agent_reports: Annotated[dict[str, AgentReport], merge_reports]
     flags: Annotated[list[str], operator.add]
     final_report: FinalReport

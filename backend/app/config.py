@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5"
     newsapi_key: str = ""
     cors_origins: str = "http://localhost:5173"
+    # Phase 3 — persistence & auth. SQLite by default (zero setup); swap to
+    # e.g. postgresql+psycopg://user:pass@host/dbname when needed.
+    database_url: str = "sqlite:///./investment.db"
+    jwt_secret: str = "dev-only-secret-change-me-via-dotenv-0123456789"  # ≥32 bytes; override in .env
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
     # SEC fair-access policy requires a descriptive UA with contact info.
     sec_user_agent: str = "AI-Investment-Research/0.2 (ngoe5@uci.edu)"
 

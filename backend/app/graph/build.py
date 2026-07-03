@@ -3,13 +3,17 @@
 Topology:
 
     planner ──Send──▶ news ─────┐
-            ──Send──▶ financials ─▶ gather ─▶ (valuation?) ─▶ recommend ─▶ END
-            ──Send──▶ technicals ┘
+            ──Send──▶ financials ─▶ gather ─▶ (valuation?) ─▶ (portfolio?)
+            ──Send──▶ technicals ┘                                │
+                                                       recommend ─▶ END
 
 - The planner fans out ONLY to the agents in its plan (dynamic Send edges).
 - Stage-1 agents run in parallel in one superstep; `gather` joins them.
 - Valuation runs after gather so it can consume the financials agent's EDGAR
   figures from shared state.
+- Phase 3: the Portfolio Manager Agent runs when the planner put "portfolio"
+  in the plan (i.e. a logged-in, personalized run) — its claims flow into the
+  Recommendation Agent exactly like every other agent's.
 - Any single agent failure becomes a `<agent>_unavailable` flag; the run
   continues (a core Phase 2 requirement).
 """
@@ -26,6 +30,7 @@ from langgraph.types import Send
 from app.agents import (
     FinancialStatementAgent,
     NewsAgent,
+    PortfolioManagerAgent,
     RecommendationAgent,
     TechnicalAnalysisAgent,
     ValuationAgent,
@@ -33,7 +38,7 @@ from app.agents import (
 from app.graph import events
 from app.graph.planner import planner_node
 from app.graph.state import STAGE1_AGENTS, ResearchState
-from app.models import AgentReport, FinalReport
+from app.models import AgentReport, FinalReport, PortfolioContext
 from app.tools.base import (
     AgentLLMProvider,
     FinancialsProvider,
@@ -49,6 +54,7 @@ _AGENT_LABELS = {
     "financials": "Fetching SEC financials",
     "technicals": "Analyzing technicals",
     "valuation": "Computing valuation",
+    "portfolio": "Checking portfolio fit",
     "recommendation": "Synthesizing recommendation",
 }
 
@@ -92,6 +98,7 @@ def build_graph(
     fin_agent = FinancialStatementAgent(financials)
     tech_agent = TechnicalAnalysisAgent(prices)
     val_agent = ValuationAgent(market)
+    port_agent = PortfolioManagerAgent(market)
     rec_agent = RecommendationAgent(llm)
 
     def route_stage1(state: ResearchState):
@@ -104,7 +111,16 @@ def build_graph(
         return {}  # join point for the parallel stage-1 branches
 
     def route_after_gather(state: ResearchState) -> str:
-        return "valuation" if "valuation" in state["plan"] else "recommendation"
+        if "valuation" in state["plan"]:
+            return "valuation"
+        return route_after_valuation(state)
+
+    def route_after_valuation(state: ResearchState) -> str:
+        return "portfolio" if "portfolio" in state["plan"] else "recommendation"
+
+    def run_portfolio(state: ResearchState) -> AgentReport:
+        context = PortfolioContext(**(state.get("portfolio_context") or {}))
+        return port_agent.run(state["ticker"], context)
 
     def run_valuation(state: ResearchState) -> AgentReport:
         # If the financials agent succeeded, pull the same EDGAR figures for
@@ -154,6 +170,7 @@ def build_graph(
     )
     builder.add_node("gather", gather_node)
     builder.add_node("valuation", _guarded("valuation", run_valuation))
+    builder.add_node("portfolio", _guarded("portfolio", run_portfolio))
     builder.add_node("recommendation", recommend_node)
 
     builder.add_edge(START, "planner")
@@ -161,9 +178,12 @@ def build_graph(
     for a in STAGE1_AGENTS:
         builder.add_edge(a, "gather")
     builder.add_conditional_edges(
-        "gather", route_after_gather, ["valuation", "recommendation"]
+        "gather", route_after_gather, ["valuation", "portfolio", "recommendation"]
     )
-    builder.add_edge("valuation", "recommendation")
+    builder.add_conditional_edges(
+        "valuation", route_after_valuation, ["portfolio", "recommendation"]
+    )
+    builder.add_edge("portfolio", "recommendation")
     builder.add_edge("recommendation", END)
 
     return builder.compile(checkpointer=checkpointer or InMemorySaver())

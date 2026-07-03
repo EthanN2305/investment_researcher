@@ -44,7 +44,13 @@ class RunManager:
     def get(self, run_id: str) -> Run | None:
         return self._runs.get(run_id)
 
-    def start(self, ticker: str, depth: str | None, lens: str | None) -> str:
+    def start(
+        self,
+        ticker: str,
+        depth: str | None,
+        lens: str | None,
+        portfolio_context: dict | None = None,
+    ) -> str:
         run_id = uuid.uuid4().hex[:12]
         run = Run(run_id=run_id, ticker=ticker)
         events.register(run_id)
@@ -55,6 +61,10 @@ class RunManager:
             payload["depth"] = depth
         if lens:
             payload["lens"] = lens
+        if portfolio_context:
+            # Phase 3: snapshot of the user's holdings/preferences; the planner
+            # sees it and adds the Portfolio Manager Agent to the plan.
+            payload["portfolio_context"] = portfolio_context
         self._spawn(run, payload)
         return run_id
 

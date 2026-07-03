@@ -11,6 +11,7 @@ from .financials import FinancialStatementAgent
 from .valuation import ValuationAgent
 from .technicals import TechnicalAnalysisAgent
 from .recommend import RecommendationAgent
+from .portfolio import PortfolioManagerAgent
 
 __all__ = [
     "NewsAgent",
@@ -18,4 +19,5 @@ __all__ = [
     "ValuationAgent",
     "TechnicalAnalysisAgent",
     "RecommendationAgent",
+    "PortfolioManagerAgent",
 ]
