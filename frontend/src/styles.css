@@ -258,3 +258,211 @@ body {
   color: var(--muted);
   font-size: 0.8rem;
 }
+
+/* --- Phase 2: search depth select ---------------------------------------- */
+
+.search select {
+  padding: 0.7rem 0.6rem;
+  font-size: 0.95rem;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* --- Phase 2: live agent progress ----------------------------------------- */
+
+.agents-progress {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  margin: 1rem 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.agent-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.92rem;
+}
+
+.agent-state {
+  width: 1.1em;
+  text-align: center;
+  color: var(--muted);
+}
+
+.agent-row.started .agent-state {
+  color: var(--accent);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+.agent-row.done .agent-state {
+  color: var(--green);
+}
+
+.agent-row.failed .agent-state {
+  color: var(--red);
+}
+
+.agent-name {
+  font-weight: 600;
+  min-width: 11rem;
+}
+
+.agent-row.pending .agent-name {
+  color: var(--muted);
+}
+
+.agent-message {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* --- Phase 2: clarifying question ------------------------------------------ */
+
+.question-card {
+  background: rgba(79, 140, 255, 0.08);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin: 1rem 0;
+}
+
+.question-text {
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.question-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  margin-right: 0.55rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.question-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.question-options button {
+  padding: 0.5rem 0.95rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.question-options button:hover {
+  border-color: var(--accent);
+}
+
+.question-freeform {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.question-freeform input {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.92rem;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.question-freeform button {
+  padding: 0.55rem 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.question-freeform button:disabled,
+.question-options button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Phase 2: grouped report ------------------------------------------------ */
+
+.report-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-transform: capitalize;
+}
+
+.recommendation {
+  border-color: var(--accent);
+}
+
+.stance {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  text-transform: capitalize;
+  margin-left: 0.4rem;
+}
+
+.stance.bullish {
+  color: var(--green);
+  background: rgba(62, 207, 142, 0.12);
+}
+
+.stance.neutral {
+  color: var(--amber);
+  background: rgba(245, 181, 68, 0.12);
+}
+
+.stance.bearish {
+  color: var(--red);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+.agent-section {
+  margin: 1.4rem 0;
+}
+
+.agent-section h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.agent-failed {
+  color: var(--red);
+  text-transform: none;
+  letter-spacing: 0;
+}

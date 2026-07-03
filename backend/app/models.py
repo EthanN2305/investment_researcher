@@ -37,7 +37,69 @@ class ResearchReport(BaseModel):
     )
 
 
+# --- Phase 2: multi-agent report contract ------------------------------------
+
+
+class AgentReport(BaseModel):
+    """Structured output of one specialist agent. Same Claim contract as Phase 1."""
+
+    agent: str = Field(..., description="Agent id, e.g. 'news', 'financials'.")
+    claims: list[Claim] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
+    status: str = Field(
+        "ok", description="'ok' | 'failed' | 'skipped' — failures never crash a run."
+    )
+
+
+class Recommendation(BaseModel):
+    """Recommendation Agent synthesis — built ONLY from structured claims."""
+
+    summary: str = ""
+    stance: str = Field("neutral", description="'bullish' | 'neutral' | 'bearish'.")
+    confidence: float = Field(0.5, ge=0.0, le=1.0)
+
+
+class FinalReport(BaseModel):
+    """Phase 2 report: per-agent claim groups plus the recommendation synthesis."""
+
+    ticker: str
+    depth: str = "deep"
+    lens: str | None = None
+    agent_reports: list[AgentReport] = Field(default_factory=list)
+    recommendation: Recommendation = Field(default_factory=Recommendation)
+    flags: list[str] = Field(default_factory=list)
+    generated_at: str = Field(..., description="ISO 8601 UTC timestamp.")
+    disclaimer: str = (
+        "This is an informational research tool, not investment advice. "
+        "Verify all figures against primary sources before acting."
+    )
+
+
 # --- Intermediate tool payloads (internal; not the API response) ------------
+
+
+class Financials(BaseModel):
+    """Annual fundamentals extracted from SEC EDGAR companyfacts (XBRL)."""
+
+    ticker: str
+    cik: str | None = None
+    company: str | None = None
+    fiscal_year_end: str | None = None  # e.g. "2025-09-27"
+    revenue: float | None = None
+    revenue_prior: float | None = None
+    net_income: float | None = None
+    total_debt: float | None = None
+    stockholders_equity: float | None = None
+    source: str = "SEC EDGAR companyfacts"
+
+
+class PriceHistory(BaseModel):
+    """Daily closes (oldest → newest) for technical analysis."""
+
+    ticker: str
+    dates: list[str] = Field(default_factory=list)
+    closes: list[float] = Field(default_factory=list)
+    source: str = "Yahoo Finance (yfinance)"
 
 
 class MarketData(BaseModel):

@@ -108,9 +108,9 @@ def test_app_imports_and_wires_endpoint():
     from app.main import app
 
     paths = {r.path for r in app.routes}
-    assert "/research/{ticker}" in paths
+    assert "/research" in paths  # Phase 2: start-run endpoint
     assert "/health" in paths
-    print("✓ FastAPI app imports; /research/{ticker} and /health wired")
+    print("✓ FastAPI app imports; /research and /health wired")
 
 
 if __name__ == "__main__":

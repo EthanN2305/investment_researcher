@@ -8,7 +8,15 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from app.models import Claim, MarketData, NewsItem
+from app.models import (
+    AgentReport,
+    Claim,
+    Financials,
+    MarketData,
+    NewsItem,
+    PriceHistory,
+    Recommendation,
+)
 
 
 class ToolError(Exception):
@@ -53,4 +61,46 @@ class LLMProvider(Protocol):
         self, ticker: str, market: MarketData, news: list[NewsItem]
     ) -> tuple[list[Claim], str]:
         """Return (claims, summary) grounded in the supplied evidence."""
+        ...
+
+
+# --- Phase 2 protocols --------------------------------------------------------
+
+
+@runtime_checkable
+class FinancialsProvider(Protocol):
+    name: str
+
+    def get_financials(self, ticker: str) -> Financials:
+        """Return annual fundamentals for a ticker or raise ToolError."""
+        ...
+
+
+@runtime_checkable
+class PriceHistoryProvider(Protocol):
+    name: str
+
+    def get_history(self, ticker: str, period: str = "1y") -> PriceHistory:
+        """Return daily closes for a ticker or raise ToolError."""
+        ...
+
+
+@runtime_checkable
+class AgentLLMProvider(Protocol):
+    """LLM calls used by Phase 2 agents. Both return structured output only."""
+
+    name: str
+
+    def claims_from_news(self, ticker: str, news: list[NewsItem]) -> list[Claim]:
+        """Turn news items into sourced claims about catalysts/risks."""
+        ...
+
+    def recommend(
+        self,
+        ticker: str,
+        agent_reports: list[AgentReport],
+        lens: str | None,
+        flags: list[str],
+    ) -> Recommendation:
+        """Synthesize a recommendation from structured claims only."""
         ...

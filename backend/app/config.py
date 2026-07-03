@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5"
     newsapi_key: str = ""
     cors_origins: str = "http://localhost:5173"
+    # SEC fair-access policy requires a descriptive UA with contact info.
+    sec_user_agent: str = "AI-Investment-Research/0.2 (ngoe5@uci.edu)"
 
     @property
     def cors_origins_list(self) -> list[str]:

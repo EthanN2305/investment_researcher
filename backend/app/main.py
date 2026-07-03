@@ -1,8 +1,13 @@
-"""FastAPI app for Phase 1 — single-ticker research report.
+"""FastAPI app for Phase 2 — multi-agent research runs.
 
-Stateless per request. POST /research/{ticker} runs the pipeline and returns a
-structured ResearchReport. Tools are constructed lazily so the app still boots
-(and /health works) even if API keys are missing.
+Flow:
+  POST /research                  → start a run, returns {run_id}
+  GET  /research/{run_id}/events  → SSE stream of per-agent progress,
+                                    clarifying questions, and the final report
+  POST /research/{run_id}/answer  → answer a clarifying question; the paused
+                                    LangGraph run resumes from its checkpoint
+
+Runs are in-memory (no persistence yet — Phase 3 adds accounts/storage).
 """
 from __future__ import annotations
 
@@ -10,21 +15,30 @@ import logging
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.logstore import log_report
-from app.models import ResearchReport
-from app.pipeline import ResearchPipeline
-from app.tools import AnthropicLLM, NewsAPINews, YFinanceMarketData
-from app.tools.base import RateLimitError, ToolError
+from app.graph import build_graph
+from app.runs import RunManager
+from app.tools import (
+    AnthropicAgentLLM,
+    NewsAPINews,
+    SecEdgarFinancials,
+    YFinanceMarketData,
+    YFinancePriceHistory,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
 
 app = FastAPI(
-    title="AI Investment Research Analyst — Phase 1",
-    version="0.1.0",
-    description="Enter a ticker, get a sourced, confidence-scored research report.",
+    title="AI Investment Research Analyst — Phase 2",
+    version="0.2.0",
+    description=(
+        "Multi-agent research: planner-orchestrated News, Financial Statement, "
+        "Valuation, and Technical Analysis agents with a Recommendation synthesis."
+    ),
 )
 
 app.add_middleware(
@@ -34,53 +48,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Graph + run manager are process-wide singletons. The LLM provider is lenient
+# about missing keys (agents fail soft with flags), so this always boots.
+_graph = build_graph(
+    market=YFinanceMarketData(),
+    news=NewsAPINews(),
+    financials=SecEdgarFinancials(),
+    prices=YFinancePriceHistory(),
+    llm=AnthropicAgentLLM(),
+)
+runs = RunManager(_graph)
 
-def build_pipeline() -> ResearchPipeline:
-    """Construct the pipeline with default providers.
 
-    Swap providers here (or via DI in tests) without touching report logic.
-    """
-    return ResearchPipeline(
-        market=YFinanceMarketData(),
-        news=NewsAPINews(),
-        llm=AnthropicLLM(),
-    )
+class StartRequest(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=12)
+    depth: str | None = Field(None, description="'quick' | 'deep' | None (planner asks)")
+    lens: str | None = Field(None, description="'growth' | 'value' | 'balanced'")
+
+
+class AnswerRequest(BaseModel):
+    answer: str = Field(..., min_length=1, max_length=200)
 
 
 @app.get("/health")
 def health() -> dict:
     return {
         "status": "ok",
+        "phase": 2,
         "anthropic_key_set": bool(settings.anthropic_api_key),
         "newsapi_key_set": bool(settings.newsapi_key),
     }
 
 
-@app.post("/research/{ticker}", response_model=ResearchReport)
-def research(ticker: str) -> ResearchReport:
-    ticker = ticker.strip().upper()
-    if not ticker or len(ticker) > 12:
+@app.post("/research")
+def start_research(req: StartRequest) -> dict:
+    ticker = req.ticker.strip().upper()
+    if not ticker or not ticker.replace(".", "").replace("-", "").isalnum():
         raise HTTPException(status_code=422, detail="Invalid ticker symbol.")
+    depth = req.depth.lower() if req.depth else None
+    if depth is not None and depth not in ("quick", "deep"):
+        raise HTTPException(status_code=422, detail="depth must be 'quick' or 'deep'.")
+    run_id = runs.start(ticker, depth, req.lens)
+    return {"run_id": run_id, "ticker": ticker}
 
-    try:
-        pipeline = build_pipeline()
-    except ToolError as exc:
-        # Missing/invalid API keys surface here.
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    try:
-        report = pipeline.run(ticker)
-    except RateLimitError as exc:
-        # Upstream throttling (e.g. Yahoo 429) — retryable, not "not found".
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except ToolError as exc:
-        # e.g. unknown ticker, market data unavailable.
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("unexpected pipeline error for %s", ticker)
+@app.get("/research/{run_id}/events")
+def research_events(run_id: str) -> StreamingResponse:
+    if runs.get(run_id) is None:
+        raise HTTPException(status_code=404, detail="Unknown run id.")
+    return StreamingResponse(
+        runs.sse_events(run_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/research/{run_id}/answer")
+def research_answer(run_id: str, req: AnswerRequest) -> dict:
+    run = runs.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Unknown run id.")
+    if not runs.answer(run_id, req.answer.strip()):
         raise HTTPException(
-            status_code=500, detail=f"Unexpected error generating report: {exc}"
-        ) from exc
+            status_code=409, detail="Run is not waiting for an answer."
+        )
+    return {"ok": True}
 
-    log_report(report)
-    return report
+
+@app.get("/research/{run_id}")
+def research_status(run_id: str) -> dict:
+    """Poll fallback: current status (and report once done)."""
+    run = runs.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Unknown run id.")
+    return {
+        "run_id": run.run_id,
+        "ticker": run.ticker,
+        "status": run.status,
+        "question": run.question,
+        "report": run.report.model_dump() if run.report else None,
+        "error": run.error,
+    }
