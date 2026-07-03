@@ -16,7 +16,7 @@ from app.logstore import log_report
 from app.models import ResearchReport
 from app.pipeline import ResearchPipeline
 from app.tools import AnthropicLLM, NewsAPINews, YFinanceMarketData
-from app.tools.base import ToolError
+from app.tools.base import RateLimitError, ToolError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
@@ -70,6 +70,9 @@ def research(ticker: str) -> ResearchReport:
 
     try:
         report = pipeline.run(ticker)
+    except RateLimitError as exc:
+        # Upstream throttling (e.g. Yahoo 429) — retryable, not "not found".
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ToolError as exc:
         # e.g. unknown ticker, market data unavailable.
         raise HTTPException(status_code=404, detail=str(exc)) from exc

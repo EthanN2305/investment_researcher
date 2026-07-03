@@ -19,6 +19,14 @@ class ToolError(Exception):
     """
 
 
+class RateLimitError(ToolError):
+    """Raised when an upstream provider throttles us (e.g. Yahoo HTTP 429).
+
+    Distinct from a generic ToolError so the API can return 503 (try again
+    later) instead of 404 (ticker not found).
+    """
+
+
 @runtime_checkable
 class MarketDataProvider(Protocol):
     name: str
