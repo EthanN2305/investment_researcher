@@ -1,4 +1,5 @@
-"""FastAPI app for Phase 3 — multi-agent research with accounts & portfolios.
+"""FastAPI app for Phase 4 — research tool with watchlists, daily summaries,
+alerts, and explainable confidence.
 
 Flow:
   POST /research                  → start a run, returns {run_id}; if the
@@ -10,8 +11,10 @@ Flow:
   POST /research/{run_id}/answer  → answer a clarifying question; the paused
                                     LangGraph run resumes from its checkpoint
 
-Phase 3 additions: /auth/* (sign-up/login, JWT), /portfolio and /preferences
-CRUD (SQLite via SQLAlchemy). Runs themselves remain in-memory.
+Phase 3: /auth/* (sign-up/login, JWT), /portfolio and /preferences CRUD.
+Phase 4: /watchlist CRUD, /summaries (stored daily reports + run-now),
+/alerts rule config, /notifications — plus an in-process APScheduler job
+that runs the pipeline daily for every watched/held ticker.
 """
 from __future__ import annotations
 
@@ -28,9 +31,17 @@ from app.config import settings
 from app.db import get_db, init_db
 from app.db_models import User
 from app.graph import build_graph
-from app.routers import auth_router, create_portfolio_router
+from app.routers import (
+    alerts_router,
+    auth_router,
+    create_portfolio_router,
+    create_summaries_router,
+    digest_router,
+    watchlist_router,
+)
 from app.routers.portfolio import load_portfolio_context
 from app.runs import RunManager
+from app.scheduler import start_scheduler
 from app.tools import (
     AnthropicAgentLLM,
     NewsAPINews,
@@ -43,13 +54,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
 
 app = FastAPI(
-    title="AI Investment Research Analyst — Phase 3",
-    version="0.3.0",
+    title="AI Investment Research Analyst — Phase 4",
+    version="0.4.0",
     description=(
         "Multi-agent research: planner-orchestrated News, Financial Statement, "
         "Valuation, and Technical Analysis agents with a Recommendation synthesis. "
         "Phase 3 adds accounts, stored portfolios/preferences, and a Portfolio "
-        "Manager Agent that personalizes the report for logged-in users."
+        "Manager Agent. Phase 4 adds watchlists, scheduled daily summaries, "
+        "configurable alerts with in-app/email notifications, and explainable "
+        "confidence scoring."
     ),
 )
 
@@ -65,11 +78,12 @@ app.add_middleware(
 # Graph + run manager are process-wide singletons. The LLM provider is lenient
 # about missing keys (agents fail soft with flags), so this always boots.
 _market = YFinanceMarketData()
+_prices = YFinancePriceHistory()
 _graph = build_graph(
     market=_market,
     news=NewsAPINews(),
     financials=SecEdgarFinancials(),
-    prices=YFinancePriceHistory(),
+    prices=_prices,
     llm=AnthropicAgentLLM(),
 )
 runs = RunManager(_graph)
@@ -77,6 +91,20 @@ runs = RunManager(_graph)
 # Phase 3 routers: auth + portfolio/preferences CRUD.
 app.include_router(auth_router)
 app.include_router(create_portfolio_router(_market))
+# Phase 4 routers: watchlist, stored summaries, alerts & notifications.
+app.include_router(watchlist_router)
+app.include_router(create_summaries_router(_graph, _prices))
+app.include_router(alerts_router)
+app.include_router(digest_router)
+
+# Phase 4: in-process APScheduler daily-summary job (no broker needed).
+_scheduler = start_scheduler(_graph, _prices)
+
+
+@app.on_event("shutdown")
+def _shutdown_scheduler() -> None:
+    if _scheduler is not None:
+        _scheduler.shutdown(wait=False)
 
 
 class StartRequest(BaseModel):
@@ -98,9 +126,10 @@ class AnswerRequest(BaseModel):
 def health() -> dict:
     return {
         "status": "ok",
-        "phase": 3,
+        "phase": 4,
         "anthropic_key_set": bool(settings.anthropic_api_key),
         "newsapi_key_set": bool(settings.newsapi_key),
+        "scheduler_running": _scheduler is not None and _scheduler.running,
     }
 
 

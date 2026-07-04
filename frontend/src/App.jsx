@@ -7,14 +7,28 @@ import {
   subscribeToRun,
 } from "./api.js";
 import AgentProgress from "./components/AgentProgress.jsx";
+import AlertsConfig from "./components/AlertsConfig.jsx";
 import AuthForm from "./components/AuthForm.jsx";
+import DigestSettings from "./components/DigestSettings.jsx";
+import NotificationBell from "./components/NotificationBell.jsx";
 import PortfolioPanel from "./components/PortfolioPanel.jsx";
 import PreferencesForm from "./components/PreferencesForm.jsx";
 import QuestionCard from "./components/QuestionCard.jsx";
 import ReportView from "./components/ReportView.jsx";
+import SummaryFeed from "./components/SummaryFeed.jsx";
+import WatchlistPanel from "./components/WatchlistPanel.jsx";
+
+// Views: research | feed | watchlist | alerts | portfolio
+const TABS = [
+  ["research", "Research"],
+  ["feed", "Daily Feed"],
+  ["watchlist", "Watchlist"],
+  ["alerts", "Alerts"],
+  ["portfolio", "My Portfolio"],
+];
 
 export default function App() {
-  const [view, setView] = useState("research"); // "research" | "portfolio"
+  const [view, setView] = useState("research");
   const [user, setUser] = useState(() => getAuth()); // {token, email} | null
 
   const [ticker, setTicker] = useState("");
@@ -75,8 +89,14 @@ export default function App() {
 
   async function onSubmit(e) {
     e.preventDefault();
-    const symbol = ticker.trim().toUpperCase();
+    startRun(ticker.trim().toUpperCase());
+  }
+
+  // Also reachable from the watchlist's "Research now" buttons.
+  async function startRun(symbol) {
     if (!symbol) return;
+    setTicker(symbol);
+    setView("research");
 
     closeRef.current?.();
     setStatus("running");
@@ -124,6 +144,7 @@ export default function App() {
           <div className="auth-status">
             {user ? (
               <>
+                <NotificationBell />
                 <span className="auth-email">{user.email}</span>
                 <button type="button" className="linklike" onClick={signOut}>
                   Sign out
@@ -146,37 +167,39 @@ export default function App() {
           {user ? ", personalized to your portfolio." : "."}
         </p>
         <nav className="tabs" aria-label="Views">
-          <button
-            type="button"
-            className={view === "research" ? "tab on" : "tab"}
-            onClick={() => setView("research")}
-          >
-            Research
-          </button>
-          <button
-            type="button"
-            className={view === "portfolio" ? "tab on" : "tab"}
-            onClick={() => setView("portfolio")}
-          >
-            My Portfolio
-          </button>
+          {TABS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={view === id ? "tab on" : "tab"}
+              onClick={() => setView(id)}
+            >
+              {label}
+            </button>
+          ))}
         </nav>
       </header>
 
-      {view === "portfolio" ? (
-        user ? (
-          <>
-            <PortfolioPanel />
-            <PreferencesForm />
-          </>
-        ) : (
-          <AuthForm
-            onAuthed={() => {
-              setUser(getAuth());
-              setView("portfolio");
-            }}
-          />
-        )
+      {view !== "research" && !user ? (
+        <AuthForm
+          onAuthed={() => {
+            setUser(getAuth());
+          }}
+        />
+      ) : view === "portfolio" ? (
+        <>
+          <PortfolioPanel />
+          <PreferencesForm />
+        </>
+      ) : view === "watchlist" ? (
+        <WatchlistPanel onResearch={startRun} />
+      ) : view === "feed" ? (
+        <>
+          <SummaryFeed />
+          <DigestSettings />
+        </>
+      ) : view === "alerts" ? (
+        <AlertsConfig />
       ) : (
         <>
           <form className="search" onSubmit={onSubmit}>

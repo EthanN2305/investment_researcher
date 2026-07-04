@@ -57,6 +57,16 @@ class Recommendation(BaseModel):
     summary: str = ""
     stance: str = Field("neutral", description="'bullish' | 'neutral' | 'bearish'.")
     confidence: float = Field(0.5, ge=0.0, le=1.0)
+    # Phase 4: overall confidence is *derived* (reasoned over the underlying
+    # agents' confidence levels), not just the LLM's self-estimate. These
+    # fields surface the derivation in the UI.
+    agent_confidences: dict[str, float] = Field(
+        default_factory=dict,
+        description="Mean claim confidence per contributing agent, 0-1.",
+    )
+    confidence_rationale: str = Field(
+        "", description="Human-readable explanation of the derived confidence."
+    )
 
 
 class FinalReport(BaseModel):
@@ -182,3 +192,88 @@ class PortfolioContext(BaseModel):
     user_email: str
     holdings: list[HoldingOut] = Field(default_factory=list)
     preferences: PreferencesOut | None = None
+
+
+# --- Phase 4: watchlists, summaries, alerts, notifications --------------------
+
+ALERT_CONDITIONS = ("price_move", "high_confidence_claim", "negative_news")
+
+# Default thresholds when the user doesn't set one.
+ALERT_DEFAULT_THRESHOLDS = {
+    "price_move": 5.0,             # abs % daily move
+    "high_confidence_claim": 0.85,  # claim confidence 0-1
+    "negative_news": None,          # no threshold — keyword-based
+}
+
+
+class WatchlistItemIn(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=12)
+    note: str | None = Field(None, max_length=255)
+
+
+class WatchlistItemOut(WatchlistItemIn):
+    id: int
+    created_at: str = ""
+
+
+class StoredReportSummary(BaseModel):
+    """Feed item — everything the dashboard needs without the full report."""
+
+    id: int
+    ticker: str
+    stance: str
+    confidence: float
+    summary: str
+    trigger: str
+    created_at: str
+
+
+class StoredReportOut(StoredReportSummary):
+    report: FinalReport
+
+
+class AlertRuleIn(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=12)
+    condition: str = Field(..., description=f"One of {ALERT_CONDITIONS}")
+    threshold: float | None = Field(
+        None,
+        description="price_move: abs %% daily move; "
+        "high_confidence_claim: min confidence 0-1; negative_news: unused.",
+    )
+    email: bool = False
+    active: bool = True
+
+
+class AlertRuleOut(AlertRuleIn):
+    id: int
+
+
+DIGEST_FREQUENCIES = ("daily", "weekly", "monthly")
+
+
+class DigestPreferenceIn(BaseModel):
+    """Email digest settings: how often the daily feed gets emailed."""
+
+    enabled: bool = False
+    frequency: str = Field(
+        "daily", description="'daily' | 'weekly' | 'monthly' (1st of the month)"
+    )
+    weekday: int | None = Field(
+        None, ge=0, le=6,
+        description="Weekly only: 0=Monday … 6=Sunday. Ignored otherwise.",
+    )
+
+
+class DigestPreferenceOut(DigestPreferenceIn):
+    last_sent_at: str | None = None
+
+
+class NotificationOut(BaseModel):
+    id: int
+    ticker: str
+    condition: str
+    title: str
+    body: str
+    report_id: int | None = None
+    read: bool
+    created_at: str

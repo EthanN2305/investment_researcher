@@ -13,6 +13,11 @@ export default defineConfig({
       "/auth": "http://localhost:8000",
       "/portfolio": "http://localhost:8000",
       "/preferences": "http://localhost:8000",
+      "/watchlist": "http://localhost:8000",
+      "/summaries": "http://localhost:8000",
+      "/alerts": "http://localhost:8000",
+      "/notifications": "http://localhost:8000",
+      "/digest": "http://localhost:8000",
     },
   },
 });

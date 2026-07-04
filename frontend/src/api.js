@@ -95,6 +95,66 @@ export const getPreferences = () => request("/preferences");
 export const savePreferences = (prefs) =>
   request("/preferences", { method: "PUT", body: prefs });
 
+// --- Phase 4: watchlist -----------------------------------------------------------
+
+export const getWatchlist = () => request("/watchlist");
+
+export const addToWatchlist = (ticker, note) =>
+  request("/watchlist", { method: "POST", body: { ticker, note: note || null } });
+
+export const removeFromWatchlist = (id) =>
+  request(`/watchlist/${id}`, { method: "DELETE" });
+
+// --- Phase 4: daily summaries -------------------------------------------------------
+
+export const getSummaries = (ticker) =>
+  request(`/summaries${ticker ? `?ticker=${encodeURIComponent(ticker)}` : ""}`);
+
+// Full stored report — viewable without re-running agents.
+export const getSummary = (id) => request(`/summaries/${id}`);
+
+// Start a run-now sweep (same code path as the nightly job). Returns a job
+// object immediately: {job_id, status, total, completed, current, tickers}.
+export const runSummariesNow = () =>
+  request("/summaries/run", { method: "POST" });
+
+// Poll a run-now job's progress.
+export const getSummaryRunStatus = (jobId) =>
+  request(`/summaries/run/${encodeURIComponent(jobId)}`);
+
+// --- Phase 4: email digest of the daily feed --------------------------------------------
+
+export const getDigestPrefs = () => request("/digest");
+
+// prefs: {enabled, frequency: "daily"|"weekly"|"monthly", weekday: 0-6|null}
+export const saveDigestPrefs = (prefs) =>
+  request("/digest", { method: "PUT", body: prefs });
+
+// Email the digest immediately (preview what the schedule will send).
+export const sendDigestNow = () =>
+  request("/digest/send-now", { method: "POST" });
+
+// --- Phase 4: alerts & notifications --------------------------------------------------
+
+export const getAlertRules = () => request("/alerts");
+
+export const saveAlertRule = (rule) =>
+  request("/alerts", { method: "POST", body: rule });
+
+export const deleteAlertRule = (id) =>
+  request(`/alerts/${id}`, { method: "DELETE" });
+
+export const getNotifications = (unreadOnly = false) =>
+  request(`/notifications${unreadOnly ? "?unread_only=true" : ""}`);
+
+export const getUnreadCount = () => request("/notifications/unread-count");
+
+export const markNotificationRead = (id) =>
+  request(`/notifications/${id}/read`, { method: "POST" });
+
+export const markAllNotificationsRead = () =>
+  request("/notifications/read-all", { method: "POST" });
+
 // --- Research runs ---------------------------------------------------------------
 
 // Start a research run. Personalizes automatically when logged in.

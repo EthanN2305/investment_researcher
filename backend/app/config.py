@@ -21,6 +21,18 @@ class Settings(BaseSettings):
     # SEC fair-access policy requires a descriptive UA with contact info.
     sec_user_agent: str = "AI-Investment-Research/0.2 (ngoe5@uci.edu)"
 
+    # Phase 4 — background jobs & alert email.
+    scheduler_enabled: bool = True  # set false in tests/scripts
+    daily_summary_hour_utc: int = 13   # 13:30 UTC ≈ just after US market open
+    daily_summary_minute_utc: int = 30
+    # SMTP is optional; without SMTP_HOST, alert emails log to the console.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_starttls: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

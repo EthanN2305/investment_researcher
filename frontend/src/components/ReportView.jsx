@@ -1,4 +1,5 @@
-import ClaimCard from "./ClaimCard.jsx";
+import { useState } from "react";
+import ClaimCard, { ConfidenceBar } from "./ClaimCard.jsx";
 import { AGENT_LABELS } from "./AgentProgress.jsx";
 
 const FLAG_LABELS = {
@@ -32,11 +33,64 @@ function StanceBadge({ stance, confidence }) {
   );
 }
 
+// Phase 4: the Recommendation Agent's confidence is *derived* from the
+// underlying agents — show the per-agent breakdown and the rationale.
+function ConfidenceBreakdown({ recommendation }) {
+  const [open, setOpen] = useState(false);
+  const perAgent = recommendation.agent_confidences || {};
+  const entries = Object.entries(perAgent);
+  if (entries.length === 0 && !recommendation.confidence_rationale) return null;
+
+  return (
+    <div className="confidence-breakdown">
+      <button
+        type="button"
+        className="linklike breakdown-toggle"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        {open ? "▾" : "▸"} Why {Math.round((recommendation.confidence ?? 0) * 100)}%
+        confident?
+      </button>
+      {open && (
+        <div className="breakdown-body">
+          {entries.length > 0 && (
+            <ul className="breakdown-agents">
+              {entries.map(([agent, conf]) => (
+                <li key={agent} className="breakdown-row">
+                  <span className="breakdown-agent">
+                    {AGENT_LABELS[agent] || agent}
+                  </span>
+                  <ConfidenceBar value={conf} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {recommendation.confidence_rationale && (
+            <p className="breakdown-rationale">
+              {recommendation.confidence_rationale}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentSection({ ar }) {
+  const mean =
+    ar.claims.length > 0
+      ? ar.claims.reduce((s, c) => s + (c.confidence ?? 0), 0) / ar.claims.length
+      : null;
   return (
     <div className="agent-section">
       <h3>
         {AGENT_LABELS[ar.agent] || ar.agent}
+        {mean !== null && (
+          <span className="agent-mean-conf">
+            <ConfidenceBar value={mean} compact />
+          </span>
+        )}
         {ar.status === "failed" && (
           <span className="agent-failed"> — unavailable</span>
         )}
@@ -105,6 +159,7 @@ export default function ReportView({ report }) {
             />
           </h3>
           <p>{recommendation.summary}</p>
+          <ConfidenceBreakdown recommendation={recommendation} />
         </div>
       )}
 
