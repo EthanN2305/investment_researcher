@@ -10,6 +10,7 @@ Swap target: OpenAI (JSON mode), local models. Any class implementing
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from anthropic import Anthropic
 
@@ -17,11 +18,21 @@ from app.config import settings
 from app.models import AgentReport, Claim, MarketData, NewsItem, Recommendation
 from app.tools.base import ToolError
 
+# Framing follows Anthropic's financial-services reference agents: the model
+# drafts analyst work product staged for human review — it does not advise,
+# recommend trades, or execute anything.
 _SYSTEM = (
-    "You are a careful equity research analyst. You ground every claim in the "
-    "evidence provided (market data and news). You never invent figures, prices, "
-    "or sources. If the evidence is thin, you say so and lower your confidence. "
-    "You produce research and education, not personalized investment advice."
+    "You are a careful sell-side-quality equity research analyst. You draft "
+    "analyst work product for a human to review and sign off on — research "
+    "and education, never personalized investment advice or trade "
+    "instructions. You ground every claim in the evidence provided (market "
+    "data, filings-derived figures, and news). You never invent figures, "
+    "prices, dates, or sources. You quantify wherever the evidence allows "
+    "(prefer 'revenue grew 12% YoY to $500M' over 'revenue grew strongly'). "
+    "You distinguish verified facts (filed figures) from interpretation "
+    "(headlines, sentiment) and weight your confidence accordingly. If the "
+    "evidence is thin, stale, or conflicting, you say so explicitly and "
+    "lower your confidence."
 )
 
 # The tool schema IS the structured-output contract.
@@ -152,7 +163,10 @@ _RECOMMEND_TOOL = {
         "properties": {
             "summary": {
                 "type": "string",
-                "description": "3-6 sentence synthesis citing the strongest claims.",
+                "description": "4-8 sentence research-note-style synthesis: "
+                               "stance + primary driver, supporting evidence "
+                               "(with agent attribution), key risk/conflict, "
+                               "and what would change the view.",
             },
             "stance": {"type": "string", "enum": ["bullish", "neutral", "bearish"]},
             "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
@@ -184,15 +198,25 @@ class AnthropicAgentLLM:
             f" — {n.url}\n  {n.summary or ''}".rstrip()
             for n in news
         )
+        today = datetime.now(timezone.utc).date().isoformat()
         prompt = (
-            f"From the news below, extract 2-5 claims about catalysts or risks for "
-            f"{ticker}.\n\nRECENT NEWS:\n{news_lines}\n\n"
+            f"Today's date is {today}. From the news below, extract 2-5 claims "
+            f"about catalysts or risks for {ticker}.\n\n"
+            f"RECENT NEWS:\n{news_lines}\n\n"
             "Rules:\n"
             "- Base every claim only on the articles above; 'source' must be one of "
-            "their URLs.\n"
+            "their URLs. Do NOT use anything you remember from training data.\n"
+            "- Check each article's date against today's date. Weight recent "
+            "articles over older ones, and lower confidence on anything more "
+            "than two weeks old; include the article date in 'evidence'.\n"
+            "- Label each claim's direction: start with 'Catalyst:' for likely "
+            "positive drivers or 'Risk:' for likely negative ones.\n"
+            "- Quantify wherever the article does (amounts, percentages, dates) — "
+            "e.g. 'beat consensus by $120M (3%)' rather than 'beat estimates'.\n"
             "- Headlines are unverified — cap confidence at 0.7 unless multiple "
             "outlets agree.\n"
-            "- Skip articles that are not actually about the company."
+            "- Skip articles that are not actually about the company, and skip "
+            "promotional or listicle content ('top stocks to buy now')."
         )
         payload = self._call(prompt, _NEWS_CLAIMS_TOOL)
         return [Claim(**c) for c in payload.get("claims", [])]
@@ -220,9 +244,19 @@ class AnthropicAgentLLM:
             f"{lens_line}\n"
             "Rules:\n"
             "- Reason only from the claims above; do not introduce outside facts.\n"
-            "- Weigh claims by their confidence scores; note conflicts explicitly.\n"
-            "- If agents failed or data is flagged missing, lower your confidence "
-            "and say what is missing."
+            "- Structure the summary like an institutional research note: lead "
+            "with the stance and its single strongest driver, then the key "
+            "supporting evidence (cite which agent it came from), then the main "
+            "risk or conflicting evidence, and end with what new evidence would "
+            "change the view.\n"
+            "- Weigh sources by reliability: filings-derived claims (financials, "
+            "valuation) over market-derived (technicals) over headline-derived "
+            "(news). Note conflicts between agents explicitly.\n"
+            "- Weigh claims by their confidence scores.\n"
+            "- If agents failed or data is flagged missing or stale (e.g. "
+            "'stale_news'), lower your confidence and say what is missing.\n"
+            "- This is draft work product for human review — do not phrase the "
+            "output as advice to buy or sell."
         )
         payload = self._call(prompt, _RECOMMEND_TOOL)
         return Recommendation(

@@ -36,6 +36,23 @@ _EQUITY_TAGS = [
     "StockholdersEquity",
     "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
 ]
+# Operating-statistics tags (comps-analysis methodology: margins, FCF).
+# Not all filers report every tag (e.g. many omit GrossProfit) — fields stay
+# None and the agents degrade gracefully.
+_GROSS_PROFIT_TAGS = ["GrossProfit"]
+_OPERATING_INCOME_TAGS = ["OperatingIncomeLoss"]
+_OCF_TAGS = [
+    "NetCashProvidedByUsedInOperatingActivities",
+    "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+]
+_CAPEX_TAGS = [
+    "PaymentsToAcquirePropertyPlantAndEquipment",
+    "PaymentsToAcquireProductiveAssets",
+]
+_CASH_TAGS = [
+    "CashAndCashEquivalentsAtCarryingValue",
+    "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+]
 
 # Ticker→CIK map cache (the file is ~1 MB and changes rarely).
 _MAP_CACHE: dict = {"at": 0.0, "map": {}}
@@ -74,6 +91,11 @@ class SecEdgarFinancials:
         net_income = _annual_series(gaap, _NET_INCOME_TAGS)
         debt = _annual_series(gaap, _DEBT_TAGS)
         equity = _annual_series(gaap, _EQUITY_TAGS)
+        gross_profit = _annual_series(gaap, _GROSS_PROFIT_TAGS)
+        op_income = _annual_series(gaap, _OPERATING_INCOME_TAGS)
+        ocf = _annual_series(gaap, _OCF_TAGS)
+        capex = _annual_series(gaap, _CAPEX_TAGS)
+        cash = _annual_series(gaap, _CASH_TAGS)
 
         if not revenue and not net_income:
             raise ToolError(f"Could not extract annual figures for {ticker}.")
@@ -86,6 +108,12 @@ class SecEdgarFinancials:
             revenue=revenue[-1][1] if revenue else None,
             revenue_prior=revenue[-2][1] if len(revenue) > 1 else None,
             net_income=net_income[-1][1] if net_income else None,
+            net_income_prior=net_income[-2][1] if len(net_income) > 1 else None,
+            gross_profit=gross_profit[-1][1] if gross_profit else None,
+            operating_income=op_income[-1][1] if op_income else None,
+            operating_cash_flow=ocf[-1][1] if ocf else None,
+            capex=capex[-1][1] if capex else None,
+            cash_and_equivalents=cash[-1][1] if cash else None,
             total_debt=debt[-1][1] if debt else None,
             stockholders_equity=equity[-1][1] if equity else None,
             source=facts_url,

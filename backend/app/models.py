@@ -98,9 +98,22 @@ class Financials(BaseModel):
     revenue: float | None = None
     revenue_prior: float | None = None
     net_income: float | None = None
+    net_income_prior: float | None = None
+    gross_profit: float | None = None
+    operating_income: float | None = None
+    operating_cash_flow: float | None = None
+    capex: float | None = None
+    cash_and_equivalents: float | None = None
     total_debt: float | None = None
     stockholders_equity: float | None = None
     source: str = "SEC EDGAR companyfacts"
+
+    @property
+    def free_cash_flow(self) -> float | None:
+        """FCF = operating cash flow − capex (comps-analysis convention)."""
+        if self.operating_cash_flow is None:
+            return None
+        return self.operating_cash_flow - (self.capex or 0.0)
 
 
 class PriceHistory(BaseModel):

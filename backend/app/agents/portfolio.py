@@ -9,6 +9,13 @@ analysis without special-casing.
 Portfolio weights use cost value (quantity × per-share cost basis) — fully
 reproducible from stored data, no N live price lookups per run. Evidence
 strings say so explicitly.
+
+Concentration and sector-overlap checks follow the drift-band conventions in
+Anthropic's financial-services `portfolio-rebalance` skill: small drift
+within the band is fine (don't rebalance for rebalancing's sake), breaches
+are flagged with the band stated, and the suggested remedy is directing new
+money to underweight areas rather than reflexively trading — with a note
+that selling to rebalance can realize taxable gains.
 """
 from __future__ import annotations
 
@@ -22,6 +29,7 @@ _SOURCE = "User portfolio & stated preferences"
 CONCENTRATION_PCT = 0.20  # single position above this = concentration risk
 SECTOR_OVERLAP_PCT = 0.30  # sector share above this = overlap warning
 HIGH_PE = 35.0  # trailing P/E above this reads as growth-priced
+DRIFT_BAND_PCT = 0.05  # ±5% rebalancing band (portfolio-rebalance skill)
 
 
 class PortfolioManagerAgent:
@@ -92,6 +100,27 @@ class PortfolioManagerAgent:
                          "by cost value",
                 source=_SOURCE, confidence=0.9,
             ))
+            claims.append(Claim(
+                claim=f"If trimming {ticker}, note that selling can realize "
+                      f"taxable gains; directing new contributions to "
+                      f"underweight positions reduces concentration without "
+                      f"a taxable trade.",
+                evidence=f"portfolio-rebalance convention: prefer contributions "
+                         f"over sales when outside the ±{DRIFT_BAND_PCT:.0%} "
+                         f"drift band; account tax status not tracked",
+                source=_SOURCE, confidence=0.7,
+            ))
+        elif weight >= CONCENTRATION_PCT - DRIFT_BAND_PCT:
+            claims.append(Claim(
+                claim=f"{ticker} (~{weight:.0%} of portfolio) is within the "
+                      f"±{DRIFT_BAND_PCT:.0%} band of the {CONCENTRATION_PCT:.0%} "
+                      f"concentration threshold — no action needed yet, but new "
+                      f"purchases would breach it.",
+                evidence=f"weight {weight:.1%} within "
+                         f"[{CONCENTRATION_PCT - DRIFT_BAND_PCT:.0%}, "
+                         f"{CONCENTRATION_PCT:.0%}) by cost value",
+                source=_SOURCE, confidence=0.85,
+            ))
         return claims
 
     @staticmethod
@@ -123,8 +152,12 @@ class PortfolioManagerAgent:
             claims.append(Claim(
                 claim=f"Adding {ticker} would push your already-heavy {sector} "
                       f"exposure (~{share:.0%}) higher "
-                      f"(threshold {SECTOR_OVERLAP_PCT:.0%}).",
-                evidence=f"sector share {share:.1%} ≥ {SECTOR_OVERLAP_PCT:.0%}",
+                      f"(threshold {SECTOR_OVERLAP_PCT:.0%}); directing new money "
+                      f"to under-represented sectors would reduce the drift "
+                      f"without selling.",
+                evidence=f"sector share {share:.1%} ≥ {SECTOR_OVERLAP_PCT:.0%}; "
+                         f"portfolio-rebalance convention: prefer contributions "
+                         f"to underweight areas over trading",
                 source=_SOURCE, confidence=0.85,
             ))
         return claims
