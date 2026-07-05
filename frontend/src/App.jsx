@@ -11,6 +11,7 @@ import AlertsConfig from "./components/AlertsConfig.jsx";
 import AuthForm from "./components/AuthForm.jsx";
 import DigestSettings from "./components/DigestSettings.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
+import PortfolioDashboard from "./components/PortfolioDashboard.jsx";
 import PortfolioPanel from "./components/PortfolioPanel.jsx";
 import PreferencesForm from "./components/PreferencesForm.jsx";
 import QuestionCard from "./components/QuestionCard.jsx";
@@ -30,6 +31,7 @@ const TABS = [
 export default function App() {
   const [view, setView] = useState("research");
   const [user, setUser] = useState(() => getAuth()); // {token, email} | null
+  const [holdingsVersion, setHoldingsVersion] = useState(0); // bump → dashboard refetch
 
   const [ticker, setTicker] = useState("");
   const [depth, setDepth] = useState("deep"); // "quick" | "deep" | "" (planner asks)
@@ -226,7 +228,10 @@ export default function App() {
         />
       ) : view === "portfolio" ? (
         <>
-          <PortfolioPanel />
+          <PortfolioDashboard refreshKey={holdingsVersion} />
+          <PortfolioPanel
+            onChange={() => setHoldingsVersion((v) => v + 1)}
+          />
           <PreferencesForm />
         </>
       ) : view === "watchlist" ? (

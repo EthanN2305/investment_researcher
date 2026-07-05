@@ -90,6 +90,11 @@ export const saveHolding = (holding) =>
 export const deleteHolding = (id) =>
   request(`/portfolio/${id}`, { method: "DELETE" });
 
+// Live valuation: current prices, gain/loss, and a portfolio value series.
+// period: "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y"
+export const getPortfolioValuation = (period = "6mo") =>
+  request(`/portfolio/valuation?period=${encodeURIComponent(period)}`);
+
 export const getPreferences = () => request("/preferences");
 
 export const savePreferences = (prefs) =>

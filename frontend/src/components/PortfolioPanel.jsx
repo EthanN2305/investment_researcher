@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { deleteHolding, getHoldings, saveHolding } from "../api.js";
 
 // Holdings editor: list, add/update (POST upserts by ticker), remove.
-export default function PortfolioPanel() {
+// `onChange` fires after any successful mutation (dashboard refetch hook).
+export default function PortfolioPanel({ onChange }) {
   const [holdings, setHoldings] = useState(null); // null = loading
   const [ticker, setTicker] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -28,6 +29,7 @@ export default function PortfolioPanel() {
       setTicker("");
       setQuantity("");
       setCostBasis("");
+      onChange?.();
     } catch (err) {
       setError(err.message || "Could not save the holding.");
     } finally {
@@ -40,6 +42,7 @@ export default function PortfolioPanel() {
     try {
       await deleteHolding(id);
       setHoldings((hs) => hs.filter((h) => h.id !== id));
+      onChange?.();
     } catch (err) {
       setError(err.message || "Could not remove the holding.");
     }

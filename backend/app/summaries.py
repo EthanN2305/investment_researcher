@@ -29,6 +29,25 @@ _MAX_INTERRUPT_RESUMES = 3
 _SHORT_SUMMARY_SENTENCES = 3
 _SHORT_SUMMARY_CHARS = 500
 
+# The Technical Analysis Agent embeds the latest close in claim evidence,
+# e.g. "close=359.91, sma50=342.10". Extracting it gives every stored
+# summary a price snapshot the portfolio valuation can fall back to.
+_CLOSE_RE = re.compile(r"\bclose=(\d+(?:\.\d+)?)")
+
+
+def extract_price_from_report(report: FinalReport) -> float | None:
+    """Latest close parsed from the report's claims (technicals first)."""
+    ordered = sorted(report.agent_reports, key=lambda r: r.agent != "technicals")
+    for agent_report in ordered:
+        for claim in agent_report.claims:
+            m = _CLOSE_RE.search(claim.evidence or "")
+            if m:
+                try:
+                    return float(m.group(1))
+                except ValueError:
+                    continue
+    return None
+
 
 def tickers_for_user(db: Session, user: User) -> list[str]:
     """Distinct watchlist + portfolio tickers, alphabetical."""
@@ -128,6 +147,7 @@ def run_summary_for_ticker(
         summary=short_summary(report),
         report_json=report.model_dump_json(),
         trigger=trigger,
+        price=extract_price_from_report(report),
     )
     db.add(stored)
     db.commit()

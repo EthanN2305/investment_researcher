@@ -129,6 +129,9 @@ class StoredReport(Base):
     summary: Mapped[str] = mapped_column(String(600), default="")  # short blurb
     report_json: Mapped[str] = mapped_column(Text)  # full FinalReport dump
     trigger: Mapped[str] = mapped_column(String(16), default="scheduled")  # scheduled|manual
+    # Latest close extracted from the report's technical claims — lets the
+    # portfolio valuation fall back to summary prices when live quotes fail.
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
 
 

@@ -90,7 +90,7 @@ runs = RunManager(_graph)
 
 # Phase 3 routers: auth + portfolio/preferences CRUD.
 app.include_router(auth_router)
-app.include_router(create_portfolio_router(_market))
+app.include_router(create_portfolio_router(_market, _prices))
 # Phase 4 routers: watchlist, stored summaries, alerts & notifications.
 app.include_router(watchlist_router)
 app.include_router(create_summaries_router(_graph, _prices))
