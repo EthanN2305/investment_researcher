@@ -35,6 +35,7 @@ from app.routers import (
     alerts_router,
     auth_router,
     create_portfolio_router,
+    create_recommendations_router,
     create_summaries_router,
     digest_router,
     watchlist_router,
@@ -96,6 +97,8 @@ app.include_router(watchlist_router)
 app.include_router(create_summaries_router(_graph, _prices))
 app.include_router(alerts_router)
 app.include_router(digest_router)
+# Recommendations: screened universe + quick agent runs, global results.
+app.include_router(create_recommendations_router(_graph))
 
 # Phase 4: in-process APScheduler daily-summary job (no broker needed).
 _scheduler = start_scheduler(_graph, _prices)

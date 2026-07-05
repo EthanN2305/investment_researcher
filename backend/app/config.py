@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
     newsapi_key: str = ""
+    # Massive.com (formerly Polygon.io) — preferred bulk price source for the
+    # recommendations screen. Leave empty to use Yahoo Finance only.
+    massive_api_key: str = ""
+    massive_base_url: str = "https://api.massive.com"
     cors_origins: str = "http://localhost:5173"
     # Phase 3 — persistence & auth. SQLite by default (zero setup); swap to
     # e.g. postgresql+psycopg://user:pass@host/dbname when needed.

@@ -160,6 +160,18 @@ export const markNotificationRead = (id) =>
 export const markAllNotificationsRead = () =>
   request("/notifications/read-all", { method: "POST" });
 
+// --- Recommendations (global top-10 board) -----------------------------------------
+
+export const getRecommendations = () => request("/recommendations");
+
+// Kick off a sweep: screen S&P 500 + Nasdaq-100, agent-analyze survivors.
+// Returns a job dict immediately: {job_id, status, phase, completed, total}.
+export const runRecommendationsNow = () =>
+  request("/recommendations/run", { method: "POST" });
+
+export const getRecommendationsRunStatus = (jobId) =>
+  request(`/recommendations/run/${encodeURIComponent(jobId)}`);
+
 // --- Research runs ---------------------------------------------------------------
 
 // Start a research run. Personalizes automatically when logged in.

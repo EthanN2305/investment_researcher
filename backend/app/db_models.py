@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -132,6 +133,29 @@ class StoredReport(Base):
     # Latest close extracted from the report's technical claims — lets the
     # portfolio valuation fall back to summary prices when live quotes fail.
     price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+
+
+class RecommendationItem(Base):
+    """One ranked pick from a recommendations sweep (global, not per-user).
+
+    A sweep screens the S&P 500 + Nasdaq-100 universe on technicals, runs
+    the agent pipeline on the survivors, and stores the top N here under a
+    shared run_id. The latest run_id is what the Recommendations tab shows.
+    """
+
+    __tablename__ = "recommendation_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), index=True)
+    rank: Mapped[int] = mapped_column(Integer)
+    ticker: Mapped[str] = mapped_column(String(12), index=True)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    screen_score: Mapped[float] = mapped_column(Float, default=0.0)
+    momentum_3mo: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stance: Mapped[str] = mapped_column(String(16), default="neutral")
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    summary: Mapped[str] = mapped_column(String(600), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
 
 

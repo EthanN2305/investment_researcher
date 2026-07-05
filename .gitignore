@@ -23,6 +23,9 @@ dist/
 *.log
 recommendations_log.jsonl
 
+# Local price cache (Massive.com grouped-daily closes)
+massive_daily_cache.json
+
 # Database (Phase 3)
 *.db
 *.sqlite3

@@ -72,7 +72,12 @@ def short_summary(report: FinalReport) -> str:
 
 
 def run_pipeline_headless(
-    graph, ticker: str, portfolio_context: dict | None
+    graph,
+    ticker: str,
+    portfolio_context: dict | None,
+    *,
+    depth: str = "deep",
+    lens: str = "balanced",
 ) -> FinalReport | None:
     """Invoke the graph without a human in the loop.
 
@@ -85,7 +90,7 @@ def run_pipeline_headless(
     config = {"configurable": {"thread_id": run_id}}
     payload: dict = {
         "run_id": run_id, "ticker": ticker,
-        "depth": "deep", "lens": "balanced",
+        "depth": depth, "lens": lens,
     }
     if portfolio_context:
         payload["portfolio_context"] = portfolio_context

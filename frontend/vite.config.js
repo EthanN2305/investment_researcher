@@ -18,6 +18,7 @@ export default defineConfig({
       "/alerts": "http://localhost:8000",
       "/notifications": "http://localhost:8000",
       "/digest": "http://localhost:8000",
+      "/recommendations": "http://localhost:8000",
     },
   },
 });

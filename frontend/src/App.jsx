@@ -15,6 +15,7 @@ import PortfolioDashboard from "./components/PortfolioDashboard.jsx";
 import PortfolioPanel from "./components/PortfolioPanel.jsx";
 import PreferencesForm from "./components/PreferencesForm.jsx";
 import QuestionCard from "./components/QuestionCard.jsx";
+import RecommendationsPanel from "./components/RecommendationsPanel.jsx";
 import ReportView from "./components/ReportView.jsx";
 import SummaryFeed from "./components/SummaryFeed.jsx";
 import WatchlistPanel from "./components/WatchlistPanel.jsx";
@@ -22,6 +23,7 @@ import WatchlistPanel from "./components/WatchlistPanel.jsx";
 // Views: research | feed | watchlist | alerts | portfolio
 const TABS = [
   ["research", "Research"],
+  ["recommendations", "Recommendations"],
   ["feed", "Daily Feed"],
   ["watchlist", "Watchlist"],
   ["alerts", "Alerts"],
@@ -234,6 +236,8 @@ export default function App() {
           />
           <PreferencesForm />
         </>
+      ) : view === "recommendations" ? (
+        <RecommendationsPanel onResearch={startRun} />
       ) : view === "watchlist" ? (
         <WatchlistPanel onResearch={startRun} />
       ) : view === "feed" ? (

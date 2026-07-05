@@ -2102,3 +2102,150 @@ body {
   margin-left: 2px;
   cursor: help;
 }
+
+/* =========================================================================
+   Recommendations tab — ranked pick cards (landing signal-card styling)
+   ========================================================================= */
+
+.recs-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+  counter-reset: none;
+}
+
+.rec-card {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition: border-color var(--dur-med) var(--ease-out),
+    background var(--dur-med) var(--ease-out),
+    transform var(--dur-med) var(--ease-out);
+}
+
+.rec-card:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+  transform: translateY(-2px);
+}
+
+.rec-rank {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-soft);
+  background: rgba(47, 129, 255, 0.1);
+  border: 1px solid rgba(47, 129, 255, 0.25);
+  border-radius: 12px;
+}
+
+.rec-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rec-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rec-ticker {
+  font-size: 1.05rem;
+}
+
+.rec-price {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-mom {
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-summary {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.rec-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.rec-foot .confidence-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.rec-conf-track {
+  flex: 1;
+  width: auto;
+}
+
+/* Landing-style signal badges (BULLISH / NEUTRAL / BEARISH) */
+.badge-signal {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.badge-buy {
+  color: var(--green);
+  background: rgba(31, 224, 160, 0.12);
+  border: 1px solid rgba(31, 224, 160, 0.28);
+}
+
+.badge-hold {
+  color: var(--amber);
+  background: rgba(255, 194, 75, 0.12);
+  border: 1px solid rgba(255, 194, 75, 0.28);
+}
+
+.badge-sell {
+  color: var(--red);
+  background: rgba(255, 92, 122, 0.12);
+  border: 1px solid rgba(255, 92, 122, 0.28);
+}
+
+@media (max-width: 620px) {
+  .rec-card {
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .rec-rank {
+    width: 36px;
+    height: 36px;
+  }
+}
