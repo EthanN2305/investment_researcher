@@ -136,11 +136,42 @@ export default function App() {
 
   const busy = status === "running" || status === "question";
 
+  // Landing-style fixed nav: add glass blur once the page scrolls.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
     <div className="app">
-      <header className="header">
-        <div className="header-top">
-          <h1>AI Investment Research Analyst</h1>
+      <div className="bg-atmosphere" aria-hidden="true"></div>
+      <div className="bg-grid" aria-hidden="true"></div>
+
+      <header className={scrolled ? "nav scrolled" : "nav"}>
+        <div className="container nav-inner">
+          <div className="brand">
+            <span className="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 16l4-7 4 4 4-8 4 6" />
+              </svg>
+            </span>
+            MarketPilot
+          </div>
+          <nav className="nav-links" aria-label="Views">
+            {TABS.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={view === id ? "nav-link on" : "nav-link"}
+                onClick={() => setView(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
           <div className="auth-status">
             {user ? (
               <>
@@ -161,12 +192,7 @@ export default function App() {
             )}
           </div>
         </div>
-        <p className="tagline">
-          A planner coordinates news, SEC financials, valuation, and technical
-          agents — then synthesizes a sourced, confidence-scored report
-          {user ? ", personalized to your portfolio." : "."}
-        </p>
-        <nav className="tabs" aria-label="Views">
+        <nav className="tabs-mobile" aria-label="Views">
           {TABS.map(([id, label]) => (
             <button
               key={id}
@@ -180,7 +206,19 @@ export default function App() {
         </nav>
       </header>
 
-      {view !== "research" && !user ? (
+      <main className="container page">
+        <div className="page-head">
+          <h1>
+            AI-powered <span className="grad">investment research</span>
+          </h1>
+          <p className="tagline">
+            A planner coordinates news, SEC financials, valuation, and
+            technical agents — then synthesizes a sourced, confidence-scored
+            report{user ? ", personalized to your portfolio." : "."}
+          </p>
+        </div>
+
+        {view !== "research" && !user ? (
         <AuthForm
           onAuthed={() => {
             setUser(getAuth());
@@ -253,9 +291,20 @@ export default function App() {
           {status === "done" && report && <ReportView report={report} />}
         </>
       )}
+      </main>
 
       <footer className="footer">
-        Informational research only — not investment advice.
+        <div className="container footer-inner">
+          <div className="brand brand-sm">
+            <span className="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 16l4-7 4 4 4-8 4 6" />
+              </svg>
+            </span>
+            MarketPilot
+          </div>
+          <p>Informational research only — not investment advice.</p>
+        </div>
       </footer>
     </div>
   );
