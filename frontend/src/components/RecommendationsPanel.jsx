@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  getActiveRecommendationsRun,
   getRecommendations,
   getRecommendationsRunStatus,
   runRecommendationsNow,
@@ -37,10 +38,23 @@ export default function RecommendationsPanel({ onResearch }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [job, setJob] = useState(null); // running sweep progress
+  const [starting, setStarting] = useState(false); // click → job attached
   const pollRef = useRef(null);
 
   useEffect(() => {
     load();
+    // A sweep is global and may still be running from a previous tab visit —
+    // re-attach the progress bar instead of showing an enabled button.
+    getActiveRecommendationsRun()
+      .then((active) => {
+        if (active && active.status === "running" && active.job_id) {
+          setJob(active);
+          startPolling(active.job_id);
+        }
+      })
+      .catch(() => {
+        /* no active run / transient failure — ignore */
+      });
     return () => clearInterval(pollRef.current);
   }, []);
 
@@ -52,35 +66,45 @@ export default function RecommendationsPanel({ onResearch }) {
       .finally(() => setLoading(false));
   }
 
+  function startPolling(jobId) {
+    clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getRecommendationsRunStatus(jobId);
+        setJob(status);
+        if (status.status !== "running") {
+          clearInterval(pollRef.current);
+          setJob(null);
+          if (status.status === "error") {
+            setError(status.error || "The sweep failed.");
+          } else {
+            load();
+          }
+        }
+      } catch {
+        /* transient poll failure — keep trying */
+      }
+    }, POLL_MS);
+  }
+
   async function onRefresh() {
+    if (starting || job) return; // guard double-clicks before state settles
     setError("");
+    setStarting(true);
     try {
       const started = await runRecommendationsNow();
       setJob(started);
-      pollRef.current = setInterval(async () => {
-        try {
-          const status = await getRecommendationsRunStatus(started.job_id);
-          setJob(status);
-          if (status.status !== "running") {
-            clearInterval(pollRef.current);
-            setJob(null);
-            if (status.status === "error") {
-              setError(status.error || "The sweep failed.");
-            } else {
-              load();
-            }
-          }
-        } catch {
-          /* transient poll failure — keep trying */
-        }
-      }, POLL_MS);
+      startPolling(started.job_id);
     } catch (err) {
       setError(err.message || "Could not start the sweep.");
+    } finally {
+      setStarting(false);
     }
   }
 
   const items = data?.items || [];
   const running = job != null;
+  const busy = running || starting;
   const progressPct = job?.total
     ? Math.round((job.completed / job.total) * 100)
     : 0;
@@ -89,8 +113,8 @@ export default function RecommendationsPanel({ onResearch }) {
     <section className="panel">
       <div className="panel-head-row">
         <h3>Top 10 recommendations</h3>
-        <button type="button" onClick={onRefresh} disabled={running}>
-          {running ? "Sweeping…" : items.length ? "Refresh picks" : "Generate picks"}
+        <button type="button" onClick={onRefresh} disabled={busy} aria-busy={busy}>
+          {busy ? "Sweeping…" : items.length ? "Refresh picks" : "Generate picks"}
         </button>
       </div>
       <p className="panel-note">

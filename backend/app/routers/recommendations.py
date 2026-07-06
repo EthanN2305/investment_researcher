@@ -147,6 +147,17 @@ def create_recommendations_router(graph, session_factory=None) -> APIRouter:
         ).start()
         return job.as_dict()
 
+    @router.get("/recommendations/active")
+    def active_run(user: User = Depends(get_current_user)) -> dict:
+        """Return the currently running sweep (if any) so a freshly loaded
+        UI can re-attach its progress bar instead of showing an enabled
+        button that would 409 on click."""
+        with _RUN_LOCK:
+            job = next(
+                (j for j in _JOBS.values() if j.status == "running"), None
+            )
+        return job.as_dict() if job else {"job_id": None, "status": "idle"}
+
     @router.get("/recommendations/run/{job_id}")
     def run_status(job_id: str, user: User = Depends(get_current_user)) -> dict:
         job = _JOBS.get(job_id)

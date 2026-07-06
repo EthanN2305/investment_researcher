@@ -137,6 +137,10 @@ class MarketData(BaseModel):
     fifty_two_week_low: float | None = None
     sector: str | None = None
     industry: str | None = None
+    business_summary: str | None = None  # what the company actually does
+    employees: int | None = None
+    headquarters: str | None = None      # "City, State" or "City, Country"
+    website: str | None = None
     as_of: str | None = None
     source: str = "Yahoo Finance (yfinance)"
 

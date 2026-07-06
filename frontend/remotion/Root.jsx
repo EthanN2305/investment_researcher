@@ -21,7 +21,12 @@ export function RemotionRoot() {
       height={1920}
       calculateMetadata={({ props }) => ({
         props,
-        durationInFrames: videoDurationInFrames(props.duration_sec ?? 30),
+        // Duration follows the narration so audio is never cut and neither cut
+        // is hard-capped — see sceneDurations in StockVideo.
+        durationInFrames: videoDurationInFrames(
+          props.duration_sec ?? 30,
+          props.voice ?? null
+        ),
       })}
     />
   );

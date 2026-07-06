@@ -135,6 +135,10 @@ class YFinanceMarketData:
             fifty_two_week_low=fast.get("year_low") or info.get("fiftyTwoWeekLow"),
             sector=info.get("sector"),
             industry=info.get("industry"),
+            business_summary=info.get("longBusinessSummary"),
+            employees=_as_int(info.get("fullTimeEmployees")),
+            headquarters=_headquarters(info),
+            website=info.get("website"),
             as_of=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -176,3 +180,18 @@ def _safe(obj, attr):
         return getattr(obj, attr)
     except Exception:  # noqa: BLE001
         return None
+
+
+def _as_int(v) -> int | None:
+    try:
+        return int(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _headquarters(info: dict) -> str | None:
+    """"City, State" (US) or "City, Country" — best-effort from .info."""
+    city = info.get("city")
+    region = info.get("state") or info.get("country")
+    parts = [p for p in (city, region) if p]
+    return ", ".join(parts) if parts else None

@@ -3,16 +3,16 @@
 // <Player>; "Download" asks the backend to render a real 1080x1920 MP4
 // with the same composition and props.
 //
-// The user can also pick any stock from the latest top-10 (e.g. "#2 of the
-// day") and choose the video length: 30s or 1m05s.
+// The user can pick any stock from the latest top-10 (e.g. "#2 of the day")
+// and choose a Short or Long cut.
 import { useEffect, useRef, useState } from "react";
 import { Player } from "@remotion/player";
 import {
   downloadLearnVideo,
   getLearnPicks,
   getLearnRenderStatus,
-  getLearnShuffle,
   getStockOfTheDay,
+  makeLearnVoiceover,
   startLearnRender,
 } from "../api.js";
 import StockVideo, {
@@ -29,12 +29,14 @@ const PHASE_LABEL = {
   rendering: "Rendering frames…",
 };
 
+// Two cuts: a quick Short version and a fuller Long version. Kept as friendly
+// labels — the underlying second counts don't need to be exact to the viewer.
 const DURATIONS = [
-  { sec: 30, label: "30 sec" },
-  { sec: 65, label: "1 min 5 sec" },
+  { sec: 30, label: "Short" },
+  { sec: 65, label: "Long" },
 ];
 
-const durationLabel = (sec) => (sec === 65 ? "1m05s" : `${sec}s`);
+const durationLabel = (sec) => (sec === 65 ? "long" : "short");
 
 export default function LearnPanel() {
   const [pick, setPick] = useState(null);
@@ -45,8 +47,10 @@ export default function LearnPanel() {
   const [error, setError] = useState("");
   const [job, setJob] = useState(null); // running render job
   const [downloaded, setDownloaded] = useState(false);
-  const [shuffling, setShuffling] = useState(false);
   const [copied, setCopied] = useState(""); // "title" | "description" | ""
+  const [voiceOn, setVoiceOn] = useState(true); // narration toggle
+  const [voice, setVoice] = useState(null); // voiceover manifest for preview
+  const [voiceLoading, setVoiceLoading] = useState(false);
   const pollRef = useRef(null);
 
   async function copyText(text, which) {
@@ -74,26 +78,38 @@ export default function LearnPanel() {
     return () => clearInterval(pollRef.current);
   }, []);
 
+  // Generate (or reuse) the narration whenever the pick, length, or toggle
+  // changes. Best-effort: if no TTS engine is installed the manifest just
+  // reports `available: false` and the video plays silently.
+  useEffect(() => {
+    if (!pick || !voiceOn) {
+      setVoice(null);
+      return;
+    }
+    let cancelled = false;
+    setVoiceLoading(true);
+    makeLearnVoiceover(pick.ticker, duration)
+      .then((m) => {
+        if (!cancelled) setVoice(m);
+      })
+      .catch(() => {
+        if (!cancelled) setVoice(null);
+      })
+      .finally(() => {
+        if (!cancelled) setVoiceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pick?.ticker, duration, voiceOn]);
+
   function selectPick(next) {
     if (!next || next.ticker === pick?.ticker) return;
     setError("");
     setDownloaded(false);
     setCopied("");
+    setVoice(null);
     setPick(next);
-  }
-
-  async function onShuffle() {
-    setError("");
-    setDownloaded(false);
-    setShuffling(true);
-    try {
-      const next = await getLearnShuffle(pick?.ticker);
-      setPick(next);
-    } catch (err) {
-      setError(err.message || "Could not pick another stock.");
-    } finally {
-      setShuffling(false);
-    }
   }
 
   async function onDownload() {
@@ -139,7 +155,9 @@ export default function LearnPanel() {
 
   const rendering = job != null;
   const isDaily = daily && pick && pick.ticker === daily.ticker;
-  const frames = videoDurationInFrames(duration);
+  // Length follows the narration (scenes stretch to fit the voice), so the
+  // preview's frame count must account for the active voiceover too.
+  const frames = videoDurationInFrames(duration, voiceOn ? voice : null);
 
   if (loading) {
     return (
@@ -171,7 +189,7 @@ export default function LearnPanel() {
         <span className="learn-date">{pick.date_label}</span>
       </div>
       <p className="panel-note">
-        A {duration === 65 ? "65-second" : "30-second"} brief on{" "}
+        A {duration === 65 ? "long" : "short"} brief on{" "}
         <strong>${pick.ticker}</strong> —{" "}
         {isDaily
           ? "today's random pick from the agents' top 10. A new stock drops every day."
@@ -181,7 +199,9 @@ export default function LearnPanel() {
       <div className="learn-layout">
         <div className="learn-player-wrap">
           <Player
-            key={`${pick.ticker}-${duration}`}
+            key={`${pick.ticker}-${duration}-${
+              voiceOn && voice?.available ? voice.dir : "silent"
+            }`}
             component={StockVideo}
             inputProps={{
               ticker: pick.ticker,
@@ -194,6 +214,12 @@ export default function LearnPanel() {
               summary: pick.summary,
               date_label: pick.date_label,
               duration_sec: duration,
+              details: pick.details || {},
+              news: pick.news || [],
+              reasons: pick.reasons || [],
+              captions:
+                (voiceOn && voice?.captions) || pick.captions || {},
+              voice: voiceOn ? voice : null,
             }}
             durationInFrames={frames}
             fps={FPS}
@@ -204,12 +230,67 @@ export default function LearnPanel() {
             loop
             autoPlay
             initiallyMuted
+            // The composition mounts one <Audio> per scene. Remotion's default
+            // shared-audio-tag pool (5 tags, primed on first gesture) throws
+            // when you unmute after that — so opt out and give each clip its
+            // own tag. Non-overlapping narration means this is cheap.
+            numberOfSharedAudioTags={0}
           />
         </div>
 
         <div className="learn-side">
           <h4>#{pick.rank} of today's top 10</h4>
           <p className="learn-summary">{pick.summary}</p>
+
+          {pick.details && pick.details.about && (
+            <p className="learn-about">
+              <strong>What they do:</strong> {pick.details.about}
+            </p>
+          )}
+
+          {pick.details && (pick.details.sector || pick.details.market_cap) && (
+            <div className="learn-detail-chips">
+              {pick.details.sector && (
+                <span className="learn-chip">{pick.details.sector}</span>
+              )}
+              {pick.details.market_cap && pick.details.market_cap !== "—" && (
+                <span className="learn-chip">{pick.details.market_cap}</span>
+              )}
+              {pick.details.pe_ratio && (
+                <span className="learn-chip">{pick.details.pe_ratio}× P/E</span>
+              )}
+            </div>
+          )}
+
+          {pick.reasons && pick.reasons.length > 0 && (
+            <div className="learn-reasons">
+              <h5>Why the AI picked it</h5>
+              <ul>
+                {pick.reasons.slice(0, 4).map((r, i) => (
+                  <li key={i}>
+                    <span className="learn-reason-icon">{r.icon}</span>
+                    <span>{r.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {pick.news && pick.news.length > 0 && (
+            <div className="learn-news">
+              <h5>Recent news</h5>
+              <ul>
+                {pick.news.map((n, i) => (
+                  <li key={i}>
+                    <span className="learn-news-title">{n.title}</span>
+                    <span className="learn-news-meta">
+                      {n.source} · {n.when}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="learn-duration" role="group" aria-label="Video length">
             <span className="learn-option-label">Length</span>
@@ -231,24 +312,42 @@ export default function LearnPanel() {
             ))}
           </div>
 
+          <div className="learn-voice" role="group" aria-label="Voiceover">
+            <span className="learn-option-label">Voiceover</span>
+            <button
+              type="button"
+              className={`learn-voice-toggle${voiceOn ? " active" : ""}`}
+              onClick={() => setVoiceOn((v) => !v)}
+              disabled={rendering}
+              aria-pressed={voiceOn}
+            >
+              {voiceOn ? "🔊 On" : "🔇 Off"}
+            </button>
+            {voiceOn && voiceLoading && (
+              <span className="learn-voice-note">Generating narration…</span>
+            )}
+            {voiceOn && !voiceLoading && voice && !voice.available && (
+              <span className="learn-voice-note">
+                No speech engine found — captions still show.
+              </span>
+            )}
+            {voiceOn && !voiceLoading && voice && voice.available && (
+              <span className="learn-voice-note">
+                Narration ready — unmute the player to hear it.
+              </span>
+            )}
+          </div>
+
           <div className="learn-actions">
             <button
               type="button"
               onClick={onDownload}
-              disabled={rendering || shuffling}
+              disabled={rendering}
               className="learn-download"
             >
               {rendering
                 ? PHASE_LABEL[job.phase] || "Rendering…"
-                : `Download (${durationLabel(duration)})`}
-            </button>
-            <button
-              type="button"
-              onClick={onShuffle}
-              disabled={rendering || shuffling}
-              className="learn-shuffle"
-            >
-              {shuffling ? "Picking…" : "🎲 Another stock"}
+                : `Download (${duration === 65 ? "Long" : "Short"})`}
             </button>
           </div>
           {rendering && (
@@ -259,8 +358,8 @@ export default function LearnPanel() {
           )}
           {downloaded && (
             <p className="learn-done">
-              Saved! Vertical 9:16, {durationLabel(duration)} — ready for
-              TikTok and YouTube Shorts.
+              Saved! Vertical 9:16, {duration === 65 ? "long" : "short"} cut —
+              ready for TikTok and YouTube Shorts.
             </p>
           )}
           {error && (
@@ -325,7 +424,7 @@ export default function LearnPanel() {
                     p.ticker === pick.ticker ? " active" : ""
                   }`}
                   onClick={() => selectPick(p)}
-                  disabled={rendering || shuffling}
+                  disabled={rendering}
                 >
                   <span className="learn-pick-rank">#{p.rank}</span>
                   <span className="learn-pick-ticker">${p.ticker}</span>

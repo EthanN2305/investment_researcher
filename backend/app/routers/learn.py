@@ -37,12 +37,20 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.db import get_db
 from app.db_models import RecommendationItem, User
+from app import learn_voice
+from app.learn_brief import build_brief, build_narration
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _FRONTEND_DIR = _PROJECT_ROOT / "frontend"
 _RENDER_DIR = _PROJECT_ROOT / "backend" / "renders"
+# Voiceover clips live in the frontend's public/ so Vite serves them to the
+# in-app <Player> preview and Remotion's staticFile() resolves them for renders.
+_VOICE_DIR = _FRONTEND_DIR / "public" / "voiceover"
 _RENDER_TIMEOUT_S = 15 * 60
 _ALLOWED_DURATIONS = (30, 65)  # seconds: 30s and 1m05s
+# Bump when the narration script, voice, or composition changes so stale cached
+# voiceover clips / MP4s are bypassed instead of reused.
+_CACHE_VERSION = "v2"
 
 
 class StockOfTheDayOut(BaseModel):
@@ -59,6 +67,20 @@ class StockOfTheDayOut(BaseModel):
     run_id: str        # recommendations sweep it came from
     title: str         # ready-to-post video title (YouTube/TikTok caption)
     description: str   # ready-to-post video description w/ key points + tags
+    # Enriched "video brief" fields (populated for single-pick endpoints, left
+    # empty for the fast top-10 list). Grounded in live data; see learn_brief.
+    details: dict = {}      # sector, market cap, 52-wk range, P/E …
+    news: list = []         # recent headlines: [{title, source, when}]
+    reasons: list = []      # why the AI picked it: [{icon, label, text}]
+    captions: dict = {}     # per-scene narration text (subtitles)
+
+
+class VoiceoverOut(BaseModel):
+    available: bool
+    engine: str | None = None
+    dir: str | None = None      # public-relative dir, e.g. "voiceover/<key>"
+    scenes: dict = {}           # {scene_id: {file, seconds}}
+    captions: dict = {}         # length-specific narration text (subtitles)
 
 
 _STANCE_WORD = {
@@ -219,7 +241,9 @@ def _latest_items(db: Session) -> list[RecommendationItem]:
     ).all()
 
 
-def _to_out(pick: RecommendationItem, today: date) -> StockOfTheDayOut:
+def _to_out(
+    pick: RecommendationItem, today: date, *, enrich: bool = False
+) -> StockOfTheDayOut:
     out = StockOfTheDayOut(
         ticker=pick.ticker,
         rank=pick.rank,
@@ -237,32 +261,74 @@ def _to_out(pick: RecommendationItem, today: date) -> StockOfTheDayOut:
     )
     out.title = _video_title(out)
     out.description = _video_description(out)
+    if enrich:
+        # Live details + recent news + structured reasons + subtitle captions.
+        # Best-effort: build_brief never raises. Captions default to the 30s
+        # narration; the render regenerates them per chosen length.
+        brief = build_brief(out)
+        out.details = brief["details"]
+        out.news = brief["news"]
+        out.reasons = brief["reasons"]
+        out.captions = build_narration(out, brief, 30)
     return out
 
 
-def _pick_of_the_day(db: Session) -> StockOfTheDayOut:
+def _pick_of_the_day(db: Session, *, enrich: bool = False) -> StockOfTheDayOut:
     """Deterministic daily pick: seed the RNG with (day, run_id) so everyone
     sees the same stock until midnight or a new sweep lands."""
     items = _latest_items(db)
     today = date.today()
     pick = random.Random(f"{today.isoformat()}:{items[0].run_id}").choice(items)
-    return _to_out(pick, today)
+    return _to_out(pick, today, enrich=enrich)
 
 
-def _pick_ticker(db: Session, ticker: str) -> StockOfTheDayOut:
+def _pick_ticker(
+    db: Session, ticker: str, *, enrich: bool = False
+) -> StockOfTheDayOut:
     """A specific stock from the latest top-10 (for shuffled videos)."""
     items = _latest_items(db)
     for item in items:
         if item.ticker == ticker:
-            return _to_out(item, date.today())
+            return _to_out(item, date.today(), enrich=enrich)
     raise HTTPException(404, f"{ticker} is not in the latest top 10.")
 
 
 def _cached_path(pick: StockOfTheDayOut, duration_sec: int) -> Path:
     return (
         _RENDER_DIR
-        / f"{pick.run_id}_{pick.date}_{pick.ticker}_{duration_sec}s.mp4"
+        / f"{pick.run_id}_{pick.date}_{pick.ticker}_{duration_sec}s_{_CACHE_VERSION}.mp4"
     )
+
+
+def _voice_key(pick: StockOfTheDayOut, duration_sec: int) -> str:
+    return f"{pick.run_id}_{pick.date}_{pick.ticker}_{duration_sec}s_{_CACHE_VERSION}"
+
+
+def _voice_rel(pick: StockOfTheDayOut, duration_sec: int) -> str:
+    """Public-relative dir the composition passes to staticFile()."""
+    return f"voiceover/{_voice_key(pick, duration_sec)}"
+
+
+def _make_voiceover(pick: StockOfTheDayOut, duration_sec: int) -> dict:
+    """Build the narration and synthesize per-scene clips (idempotent).
+    Returns a manifest dict shaped like VoiceoverOut; never raises."""
+    try:
+        brief = {
+            "details": pick.details, "news": pick.news, "reasons": pick.reasons,
+        }
+        narration = build_narration(pick, brief, duration_sec)
+        out_dir = _VOICE_DIR / _voice_key(pick, duration_sec)
+        # Spell the ticker out as letters for speech (e.g. "MU" -> "M U").
+        manifest = learn_voice.synthesize(
+            narration, out_dir, spell_out=[pick.ticker])
+        manifest["dir"] = _voice_rel(pick, duration_sec) if manifest[
+            "available"] else None
+        # Return the length-specific narration so preview subtitles match audio.
+        manifest["captions"] = narration
+        return manifest
+    except Exception:  # noqa: BLE001 — voiceover is a nicety, never fatal
+        return {"available": False, "engine": None, "dir": None,
+                "scenes": {}, "captions": {}}
 
 
 def _error_summary(output: str) -> str:
@@ -289,6 +355,16 @@ def _run_render(
     out_path: Path,
     duration_sec: int,
 ) -> None:
+    # Enrich with live details/news/reasons, build the length-specific captions,
+    # and synthesize the voiceover — all best-effort so a render never fails on
+    # a missing news key or TTS engine.
+    brief = build_brief(pick)
+    pick.details = brief["details"]
+    pick.news = brief["news"]
+    pick.reasons = brief["reasons"]
+    captions = build_narration(pick, brief, duration_sec)
+    voice = _make_voiceover(pick, duration_sec)
+
     props = {
         "ticker": pick.ticker,
         "price": pick.price,
@@ -300,6 +376,11 @@ def _run_render(
         "summary": pick.summary,
         "date_label": pick.date_label,
         "duration_sec": duration_sec,
+        "details": pick.details,
+        "news": pick.news,
+        "reasons": pick.reasons,
+        "captions": captions,
+        "voice": voice,
     }
     try:
         _RENDER_DIR.mkdir(parents=True, exist_ok=True)
@@ -373,7 +454,7 @@ class RenderRequest(BaseModel):
 def stock_of_the_day(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    return _pick_of_the_day(db)
+    return _pick_of_the_day(db, enrich=True)
 
 
 @router.get("/learn/picks", response_model=list[StockOfTheDayOut])
@@ -381,7 +462,8 @@ def learn_picks(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """The full latest top-10 (rank order) so the user can pick any stock —
-    e.g. "#2 of the day" — for their video."""
+    e.g. "#2 of the day" — for their video. Kept lightweight (no live lookups)
+    so the list loads instantly; the brief is enriched when a stock is picked."""
     today = date.today()
     return [_to_out(item, today) for item in _latest_items(db)]
 
@@ -396,7 +478,35 @@ def shuffle_pick(
     date-seeded) — powers the "another stock" button on the Learn tab."""
     items = _latest_items(db)
     pool = [i for i in items if i.ticker != (exclude or "").upper()] or items
-    return _to_out(random.choice(pool), date.today())
+    return _to_out(random.choice(pool), date.today(), enrich=True)
+
+
+class VoiceoverRequest(BaseModel):
+    ticker: str | None = None  # None → today's deterministic pick
+    duration_sec: int = 30
+
+
+@router.post("/learn/voiceover", response_model=VoiceoverOut)
+def make_voiceover(
+    req: VoiceoverRequest | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate (or reuse) the narration audio for a pick so the in-app preview
+    can play it. Returns a manifest of per-scene clips; `available` is false
+    when no TTS engine is installed (the video just plays silently)."""
+    ticker = (req.ticker if req else None) or None
+    duration_sec = req.duration_sec if req else 30
+    if duration_sec not in _ALLOWED_DURATIONS:
+        raise HTTPException(
+            422, f"duration_sec must be one of {list(_ALLOWED_DURATIONS)}."
+        )
+    pick = (
+        _pick_ticker(db, ticker.strip().upper(), enrich=True)
+        if ticker
+        else _pick_of_the_day(db, enrich=True)
+    )
+    return _make_voiceover(pick, duration_sec)
 
 
 @router.post("/learn/render", status_code=202)

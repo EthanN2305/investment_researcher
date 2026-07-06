@@ -180,6 +180,11 @@ export const runRecommendationsNow = () =>
 export const getRecommendationsRunStatus = (jobId) =>
   request(`/recommendations/run/${encodeURIComponent(jobId)}`);
 
+// Currently running sweep, if any. Lets a freshly mounted panel re-attach
+// its progress bar after a tab switch instead of re-enabling the button.
+export const getActiveRecommendationsRun = () =>
+  request("/recommendations/active");
+
 // --- Learn (stock-of-the-day video) -------------------------------------------------
 
 export const getStockOfTheDay = () => request("/learn/stock-of-the-day");
@@ -201,6 +206,14 @@ export const startLearnRender = (ticker, durationSec = 30) =>
 
 export const getLearnRenderStatus = (jobId) =>
   request(`/learn/render/${encodeURIComponent(jobId)}`);
+
+// Generate (or reuse) the narration voiceover for a pick so the in-app preview
+// can play it. Returns {available, engine, dir, scenes}.
+export const makeLearnVoiceover = (ticker, durationSec = 30) =>
+  request("/learn/voiceover", {
+    method: "POST",
+    body: { ticker: ticker || null, duration_sec: durationSec },
+  });
 
 // Fetch the finished MP4 (auth header required) and trigger a download.
 export async function downloadLearnVideo(jobId, filename) {

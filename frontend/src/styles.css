@@ -2288,6 +2288,19 @@ body {
   line-height: 1.55;
 }
 
+.learn-about {
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.95rem;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-border, rgba(255, 255, 255, 0.12));
+}
+
+.learn-about strong {
+  color: var(--text, #f4f7ff);
+}
+
 .learn-download {
   margin-top: 14px;
 }
@@ -2361,6 +2374,109 @@ body {
   border-color: var(--accent);
   color: #fff;
   font-weight: 600;
+}
+
+/* Voiceover toggle */
+.learn-voice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.learn-voice-toggle {
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
+.learn-voice-toggle.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #052018;
+  font-weight: 600;
+}
+
+.learn-voice-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* Enriched brief: detail chips, reasons, recent news */
+.learn-detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.learn-chip {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+}
+
+.learn-reasons,
+.learn-news {
+  margin-top: 18px;
+}
+
+.learn-reasons h5,
+.learn-news h5 {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.learn-reasons ul,
+.learn-news ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.learn-reasons li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.learn-reason-icon {
+  flex: 0 0 auto;
+}
+
+.learn-news li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border-strong);
+}
+
+.learn-news-title {
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.learn-news-meta {
+  font-size: 0.78rem;
+  color: var(--muted-2);
 }
 
 /* Ready-to-post caption (title + description) */

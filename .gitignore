@@ -18,6 +18,9 @@ frontend/build/
 # Learn tab: rendered stock-of-the-day MP4s (regenerated on demand)
 backend/renders/
 
+# Learn tab: generated voiceover clips (regenerated on demand)
+frontend/public/voiceover/
+
 # OS / editor
 .DS_Store
 .idea/

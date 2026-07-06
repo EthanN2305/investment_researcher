@@ -21,14 +21,14 @@ import ReportView from "./components/ReportView.jsx";
 import SummaryFeed from "./components/SummaryFeed.jsx";
 import WatchlistPanel from "./components/WatchlistPanel.jsx";
 
-// Views: research | feed | watchlist | alerts | portfolio
+// Views: research | feed | watchlist | portfolio
+// (Alerts config now lives inside the Watchlist tab.)
 const TABS = [
   ["research", "Research"],
   ["recommendations", "Recommendations"],
   ["learn", "Learn"],
   ["feed", "Daily Feed"],
   ["watchlist", "Watchlist"],
-  ["alerts", "Alerts"],
   ["portfolio", "My Portfolio"],
 ];
 
@@ -243,14 +243,15 @@ export default function App() {
       ) : view === "learn" ? (
         <LearnPanel />
       ) : view === "watchlist" ? (
-        <WatchlistPanel onResearch={startRun} />
+        <>
+          <WatchlistPanel onResearch={startRun} />
+          <AlertsConfig />
+        </>
       ) : view === "feed" ? (
         <>
           <SummaryFeed />
           <DigestSettings />
         </>
-      ) : view === "alerts" ? (
-        <AlertsConfig />
       ) : (
         <>
           <form className="search" onSubmit={onSubmit}>
