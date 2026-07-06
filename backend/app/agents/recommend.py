@@ -33,7 +33,9 @@ _AGENT_WEIGHTS = {
     "financials": 1.2,
     "valuation": 1.15,
     "technicals": 1.0,
+    "risk": 1.05,   # deterministic beta/correlation math on price series
     "portfolio": 0.9,
+    "comps": 0.85,  # deterministic math, but the peer group is LLM-selected
     "news": 0.8,
 }
 _FAILED_AGENT_PENALTY = 0.07

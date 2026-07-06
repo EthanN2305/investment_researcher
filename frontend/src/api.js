@@ -112,16 +112,24 @@ export const removeFromWatchlist = (id) =>
 
 // --- Phase 4: daily summaries -------------------------------------------------------
 
-export const getSummaries = (ticker) =>
-  request(`/summaries${ticker ? `?ticker=${encodeURIComponent(ticker)}` : ""}`);
+// latest=true dedupes to the newest summary per ticker (the feed view).
+export const getSummaries = (ticker, { latest = false } = {}) => {
+  const params = new URLSearchParams();
+  if (ticker) params.set("ticker", ticker);
+  if (latest) params.set("latest", "true");
+  const qs = params.toString();
+  return request(`/summaries${qs ? `?${qs}` : ""}`);
+};
 
 // Full stored report — viewable without re-running agents.
 export const getSummary = (id) => request(`/summaries/${id}`);
 
 // Start a run-now sweep (same code path as the nightly job). Returns a job
 // object immediately: {job_id, status, total, completed, current, tickers}.
-export const runSummariesNow = () =>
-  request("/summaries/run", { method: "POST" });
+// mode: "missing" = only tickers with no summary yet today (cheap — covers
+// newly added holdings); "all" = re-run everything.
+export const runSummariesNow = (mode = "all") =>
+  request(`/summaries/run?mode=${encodeURIComponent(mode)}`, { method: "POST" });
 
 // Poll a run-now job's progress.
 export const getSummaryRunStatus = (jobId) =>
@@ -171,6 +179,46 @@ export const runRecommendationsNow = () =>
 
 export const getRecommendationsRunStatus = (jobId) =>
   request(`/recommendations/run/${encodeURIComponent(jobId)}`);
+
+// --- Learn (stock-of-the-day video) -------------------------------------------------
+
+export const getStockOfTheDay = () => request("/learn/stock-of-the-day");
+
+// The full latest top-10 in rank order (pick-a-stock list).
+export const getLearnPicks = () => request("/learn/picks");
+
+// A random different stock from the latest top 10 ("another stock" button).
+export const getLearnShuffle = (exclude) =>
+  request(`/learn/shuffle${exclude ? `?exclude=${encodeURIComponent(exclude)}` : ""}`);
+
+// Kick off a Remotion MP4 render on the server for the given ticker (or the
+// daily pick when omitted) at 30s or 65s. Returns {job_id, status, phase}.
+export const startLearnRender = (ticker, durationSec = 30) =>
+  request("/learn/render", {
+    method: "POST",
+    body: { ticker: ticker || null, duration_sec: durationSec },
+  });
+
+export const getLearnRenderStatus = (jobId) =>
+  request(`/learn/render/${encodeURIComponent(jobId)}`);
+
+// Fetch the finished MP4 (auth header required) and trigger a download.
+export async function downloadLearnVideo(jobId, filename) {
+  const res = await fetch(
+    `/learn/render/${encodeURIComponent(jobId)}/file`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || "stock-of-the-day.mp4";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 // --- Research runs ---------------------------------------------------------------
 

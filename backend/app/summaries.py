@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import uuid
+from datetime import datetime, timezone
 
 from langgraph.types import Command
 from sqlalchemy import select
@@ -58,6 +59,34 @@ def tickers_for_user(db: Session, user: User) -> list[str]:
         select(Holding.ticker).where(Holding.user_id == user.id)
     ).all()
     return sorted({*watch, *held})
+
+
+def tickers_summarized_today(db: Session, user: User) -> set[str]:
+    """Tickers that already have a stored report since UTC midnight.
+
+    Used by run-now's "missing" mode so a second click (or a click after
+    adding one holding) only spends agent/LLM tokens on tickers that don't
+    yet have a fresh summary — instead of re-running the whole list.
+    """
+    since = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return set(
+        db.scalars(
+            select(StoredReport.ticker)
+            .where(
+                StoredReport.user_id == user.id,
+                StoredReport.created_at >= since,
+            )
+            .distinct()
+        ).all()
+    )
+
+
+def tickers_missing_today(db: Session, user: User) -> list[str]:
+    """Watched/held tickers with no summary yet today, alphabetical."""
+    have = tickers_summarized_today(db, user)
+    return [t for t in tickers_for_user(db, user) if t not in have]
 
 
 def short_summary(report: FinalReport) -> str:

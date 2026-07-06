@@ -104,3 +104,11 @@ class AgentLLMProvider(Protocol):
     ) -> Recommendation:
         """Synthesize a recommendation from structured claims only."""
         ...
+
+    def suggest_peers(
+        self, ticker: str, sector: str | None, industry: str | None
+    ) -> list[str]:
+        """Name 3-5 comparable public-company tickers (judgment only — the
+        Peer Comparison Agent fetches all numbers itself). Optional: agents
+        probe with getattr() so providers without it degrade to a flag."""
+        ...

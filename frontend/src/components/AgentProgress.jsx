@@ -3,6 +3,8 @@ export const AGENT_LABELS = {
   news: "News",
   financials: "Financial Statements",
   technicals: "Technical Analysis",
+  risk: "Market Risk",
+  comps: "Peer Comparison",
   valuation: "Valuation",
   portfolio: "Portfolio Fit",
   recommendation: "Recommendation",

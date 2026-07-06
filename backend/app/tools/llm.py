@@ -176,6 +176,28 @@ _RECOMMEND_TOOL = {
 }
 
 
+_PEERS_TOOL = {
+    "name": "emit_peer_group",
+    "description": "Emit comparable public companies for a comps analysis. "
+                   "Call exactly once.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "peers": {
+                "type": "array",
+                "description": "3-5 US-listed ticker symbols of truly "
+                               "comparable companies (similar business model "
+                               "and scale). Symbols only, e.g. ['MSFT'].",
+                "items": {"type": "string"},
+                "minItems": 1,
+                "maxItems": 5,
+            },
+        },
+        "required": ["peers"],
+    },
+}
+
+
 class AnthropicAgentLLM:
     """Structured LLM calls for the News and Recommendation agents.
 
@@ -220,6 +242,32 @@ class AnthropicAgentLLM:
         )
         payload = self._call(prompt, _NEWS_CLAIMS_TOOL)
         return [Claim(**c) for c in payload.get("claims", [])]
+
+    def suggest_peers(
+        self, ticker: str, sector: str | None, industry: str | None
+    ) -> list[str]:
+        """Peer selection for the comps agent — judgment only, no figures.
+
+        Comparability rules follow the comps-analysis skill: similar business
+        model and scale; better 3 perfect comps than 6 questionable ones.
+        """
+        context = ", ".join(
+            p for p in (f"sector: {sector}" if sector else None,
+                        f"industry: {industry}" if industry else None) if p
+        ) or "sector/industry unknown"
+        prompt = (
+            f"Name the 3-5 most comparable US-listed public companies to "
+            f"{ticker} ({context}) for a comparable-company analysis.\n"
+            "Rules:\n"
+            "- Truly comparable only: similar business model and scale — "
+            "better 3 perfect comps than 6 questionable ones.\n"
+            "- Exclude conglomerates whose main business differs, and exclude "
+            f"{ticker} itself.\n"
+            "- Return ticker symbols only; do not include any figures — all "
+            "numbers will be fetched from market data."
+        )
+        payload = self._call(prompt, _PEERS_TOOL)
+        return [str(p) for p in payload.get("peers", [])]
 
     def recommend(
         self,

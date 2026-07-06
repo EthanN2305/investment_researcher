@@ -92,7 +92,7 @@ def test_full_run_with_questions():
     assert report["ticker"] == "MSFT"
     assert report["depth"] == "deep" and report["lens"] == "growth"
     assert [a["agent"] for a in report["agent_reports"]] == [
-        "news", "financials", "technicals", "valuation",
+        "news", "financials", "technicals", "risk", "comps", "valuation",
     ]
     assert report["recommendation"]["stance"] == "bullish"
     statuses = [e for e in events if e["type"] == "status"]

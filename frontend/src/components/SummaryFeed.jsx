@@ -118,11 +118,14 @@ export default function SummaryFeed() {
   const [items, setItems] = useState(null); // null = loading
   const [job, setJob] = useState(null); // running job progress | null
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const pollRef = useRef(null);
 
   async function refresh() {
     try {
-      setItems(await getSummaries());
+      // latest=true → one card per ticker (its newest summary), so re-runs
+      // replace entries instead of stacking duplicates.
+      setItems(await getSummaries(null, { latest: true }));
     } catch (err) {
       setError(err.message || "Could not load summaries.");
     }
@@ -143,10 +146,20 @@ export default function SummaryFeed() {
     refresh();
   }
 
-  async function onRunNow() {
+  // mode: "missing" — only tickers with no summary yet today (covers newly
+  // added holdings without re-spending tokens on the rest); "all" — full re-run.
+  async function onRunNow(mode) {
     setError("");
+    setNotice("");
     try {
-      const started = await runSummariesNow();
+      const started = await runSummariesNow(mode);
+      if (started.total === 0) {
+        setNotice(
+          "Feed is already up to date — every holding has a summary today. " +
+            'Use "Rerun all" to refresh them.'
+        );
+        return;
+      }
       setJob(started);
       if (started.status !== "running") {
         finishJob(started);
@@ -175,16 +188,33 @@ export default function SummaryFeed() {
     <section className="panel">
       <div className="panel-head-row">
         <h3>Daily summaries</h3>
-        <button type="button" onClick={onRunNow} disabled={running}>
-          {running ? "Running agents…" : "Run now"}
-        </button>
+        <div className="panel-actions">
+          <button
+            type="button"
+            onClick={() => onRunNow("missing")}
+            disabled={running}
+            title="Only summarizes holdings that don't have a summary yet today (e.g. ones you just added) — existing summaries stay put."
+          >
+            {running ? "Running agents…" : "Update feed"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRunNow("all")}
+            disabled={running}
+            title="Re-runs the agents for every watched and held ticker, including newly added ones."
+          >
+            Rerun all
+          </button>
+        </div>
       </div>
       <p className="panel-note">
         The pipeline runs automatically once a day for every watched and held
         ticker; results are stored so you can read them here without re-running
-        agents. "Run now" triggers the same job on demand.
+        agents. "Update feed" only summarizes holdings missing from today's
+        feed (token-cheap); "Rerun all" refreshes everything.
       </p>
       {job && <RunProgress job={job} />}
+      {notice && <p className="panel-note" role="status">{notice}</p>}
       {error && <p className="auth-error" role="alert">{error}</p>}
 
       {items === null ? (

@@ -55,7 +55,8 @@ def planner_node(state: ResearchState) -> dict:
     if depth not in _DEPTHS:
         answer = interrupt({
             "question": "Do you want a quick check (technicals + valuation) or a "
-                        "deep dive (news, SEC financials, valuation, technicals)?",
+                        "deep dive (news, SEC financials, technicals, market "
+                        "risk, peer comparison, valuation)?",
             "options": ["quick", "deep"],
         })
         depth = "deep" if "deep" in str(answer).lower() else "quick"

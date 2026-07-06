@@ -38,6 +38,7 @@ from app.routers import (
     create_recommendations_router,
     create_summaries_router,
     digest_router,
+    learn_router,
     watchlist_router,
 )
 from app.routers.portfolio import load_portfolio_context
@@ -99,6 +100,8 @@ app.include_router(alerts_router)
 app.include_router(digest_router)
 # Recommendations: screened universe + quick agent runs, global results.
 app.include_router(create_recommendations_router(_graph))
+# Learn: stock-of-the-day video (Remotion render of a recommendations pick).
+app.include_router(learn_router)
 
 # Phase 4: in-process APScheduler daily-summary job (no broker needed).
 _scheduler = start_scheduler(_graph, _prices)

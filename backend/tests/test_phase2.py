@@ -80,6 +80,9 @@ class FakeAgentLLM:
         return [Claim(claim=f"{ticker} secured a major contract (catalyst).",
                       evidence=news[0].title, source=news[0].url, confidence=0.6)]
 
+    def suggest_peers(self, ticker, sector, industry):
+        return ["PEERA", "PEERB", "PEERC"]
+
     def recommend(self, ticker, agent_reports, lens, flags):
         assert all(isinstance(r, AgentReport) for r in agent_reports), \
             "recommendation must receive structured AgentReports only"
@@ -114,14 +117,21 @@ def test_deep_run_all_agents():
     assert "__interrupt__" not in out
     report = out["final_report"]
     agents = [r.agent for r in report.agent_reports]
-    assert agents == ["news", "financials", "technicals", "valuation"]
+    assert agents == ["news", "financials", "technicals", "risk", "comps",
+                      "valuation"]
     assert all(r.status == "ok" and r.claims for r in report.agent_reports)
     assert report.recommendation.stance == "bullish"
     assert report.lens == "growth"
     # Valuation consumed the financials agent's EDGAR figures (P/S claim).
     val = next(r for r in report.agent_reports if r.agent == "valuation")
     assert any("P/S" in c.claim or "revenue" in c.claim for c in val.claims)
-    print("✓ deep dive runs all four agents + recommendation")
+    # Risk agent computed beta vs the benchmark from aligned price series.
+    risk = next(r for r in report.agent_reports if r.agent == "risk")
+    assert any("beta" in c.claim.lower() for c in risk.claims)
+    # Comps agent benchmarked the target against its LLM-named peer group.
+    comps = next(r for r in report.agent_reports if r.agent == "comps")
+    assert any("peer" in c.claim.lower() for c in comps.claims)
+    print("✓ deep dive runs all six agents + recommendation")
 
 
 def test_quick_run_subset():
@@ -147,7 +157,7 @@ def test_clarifying_question_flow():
     out = g.invoke(Command(resume="value"), cfg("t3"))
     report = out["final_report"]
     assert report.depth == "deep" and report.lens == "value"
-    assert len(report.agent_reports) == 4
+    assert len(report.agent_reports) == 6
     print("✓ planner pauses for depth + lens questions and resumes correctly")
 
 

@@ -25,7 +25,11 @@ from app.auth import get_current_user
 from app.db import get_db
 from app.db_models import StoredReport, User
 from app.models import FinalReport, StoredReportOut, StoredReportSummary
-from app.summaries import run_summary_for_ticker, tickers_for_user
+from app.summaries import (
+    run_summary_for_ticker,
+    tickers_for_user,
+    tickers_missing_today,
+)
 from app.tools.base import PriceHistoryProvider
 
 
@@ -102,6 +106,11 @@ def create_summaries_router(
     def list_summaries(
         ticker: str | None = Query(None, max_length=12),
         limit: int = Query(50, ge=1, le=200),
+        latest: bool = Query(
+            False,
+            description="Return only the newest summary per ticker "
+            "(deduped feed view). History remains available without it.",
+        ),
         user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ):
@@ -113,7 +122,16 @@ def create_summaries_router(
         )
         if ticker:
             stmt = stmt.where(StoredReport.ticker == ticker.strip().upper())
-        return [_summary_out(r) for r in db.scalars(stmt)]
+        rows = list(db.scalars(stmt))
+        if latest:
+            seen: set[str] = set()
+            deduped = []
+            for r in rows:  # already newest-first
+                if r.ticker not in seen:
+                    seen.add(r.ticker)
+                    deduped.append(r)
+            rows = deduped
+        return [_summary_out(r) for r in rows]
 
     @router.get("/summaries/{summary_id}", response_model=StoredReportOut)
     def get_summary(
@@ -132,18 +150,36 @@ def create_summaries_router(
 
     @router.post("/summaries/run", status_code=202)
     def run_now(
+        mode: str = Query(
+            "all",
+            pattern="^(missing|all)$",
+            description="'missing' runs only tickers with no summary yet "
+            "today (token-efficient — e.g. a newly added holding); "
+            "'all' (default, backward-compatible) re-runs every "
+            "watched/held ticker.",
+        ),
         user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> dict:
-        """Start a run-now sweep for this user's tickers (same code path as
-        the nightly job). Returns immediately with a job_id — poll
+        """Start a run-now sweep (same code path as the nightly job).
+        Returns immediately with a job_id — poll
         `GET /summaries/run/{job_id}` for progress."""
-        tickers = tickers_for_user(db, user)
-        if not tickers:
+        if not tickers_for_user(db, user):
             raise HTTPException(
                 status_code=422,
                 detail="Add tickers to your watchlist or portfolio first.",
             )
+        tickers = (
+            tickers_missing_today(db, user)
+            if mode == "missing"
+            else tickers_for_user(db, user)
+        )
+        if not tickers:
+            # Everything already summarized today — nothing to spend tokens on.
+            return {
+                "job_id": None, "status": "done", "total": 0, "completed": 0,
+                "current": None, "tickers": [], "results": [], "error": None,
+            }
         # One sweep at a time per user — a second click just returns the
         # job that's already running.
         for job in _JOBS.values():

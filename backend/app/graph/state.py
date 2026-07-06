@@ -33,11 +33,13 @@ class ResearchState(TypedDict, total=False):
 
 # Stage-1 agents can run in parallel; valuation runs after (it consumes the
 # financials agent's output from state); recommendation runs last.
-STAGE1_AGENTS = ("news", "financials", "technicals")
+# Risk (beta vs SPY) and comps (peer benchmarking) are independent of the
+# other agents, so they join the parallel stage-1 fan-out.
+STAGE1_AGENTS = ("news", "financials", "technicals", "risk", "comps")
 
 PLANS: dict[str, list[str]] = {
     # Quick check: price-action + market-based valuation only (fast, no LLM).
     "quick": ["technicals", "valuation"],
     # Deep dive: everything.
-    "deep": ["news", "financials", "technicals", "valuation"],
+    "deep": ["news", "financials", "technicals", "risk", "comps", "valuation"],
 }

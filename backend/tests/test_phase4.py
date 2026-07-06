@@ -181,9 +181,10 @@ def _signup(client, email="ethan@example.com", password="hunter2secure"):
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
-def _run_now_and_wait(client, headers, timeout=10.0):
+def _run_now_and_wait(client, headers, timeout=10.0, mode=None):
     """Start a run-now job and poll its progress endpoint until done."""
-    r = client.post("/summaries/run", headers=headers)
+    url = "/summaries/run" + (f"?mode={mode}" if mode else "")
+    r = client.post(url, headers=headers)
     assert r.status_code == 202, r.text
     job = r.json()
     assert job["status"] in ("running", "done")
@@ -288,6 +289,52 @@ def test_run_now_stores_and_lists_summaries(api):
     assert client.get(f"/summaries/{feed[0]['id']}", headers=h2).status_code == 404
     assert client.get(f"/summaries/run/{job['job_id']}", headers=h2
                       ).status_code == 404
+
+
+def test_run_now_missing_mode_only_runs_new_tickers(api):
+    """mode=missing skips tickers already summarized today — a second click
+    after adding one holding runs agents for that holding only (no wasted
+    tokens), and an all-fresh feed spawns no job at all."""
+    client, _ = api
+    headers = _signup(client)
+    client.post("/watchlist", headers=headers, json={"ticker": "MU"})
+
+    job = _run_now_and_wait(client, headers, mode="missing")
+    assert job["tickers"] == ["MU"]
+
+    # add a holding after the first run — only the new ticker is researched
+    client.post("/watchlist", headers=headers, json={"ticker": "NVDA"})
+    job = _run_now_and_wait(client, headers, mode="missing")
+    assert job["tickers"] == ["NVDA"]
+
+    # everything fresh → nothing runs, no job spawned
+    r = client.post("/summaries/run?mode=missing", headers=headers)
+    assert r.status_code == 202
+    body = r.json()
+    assert body["status"] == "done"
+    assert body["total"] == 0 and body["job_id"] is None
+
+    # rerun-all still sweeps everything (default mode stays 'all')
+    job = _run_now_and_wait(client, headers, mode="all")
+    assert job["tickers"] == ["MU", "NVDA"]
+
+
+def test_summaries_latest_dedupes_to_newest_per_ticker(api):
+    """latest=true returns one (newest) row per ticker; history remains
+    available without the flag."""
+    client, _ = api
+    headers = _signup(client)
+    client.post("/watchlist", headers=headers, json={"ticker": "MU"})
+    _run_now_and_wait(client, headers, mode="all")
+    _run_now_and_wait(client, headers, mode="all")
+
+    full = client.get("/summaries", headers=headers).json()
+    assert len(full) == 2  # history keeps both runs
+
+    latest = client.get("/summaries?latest=true", headers=headers).json()
+    assert len(latest) == 1
+    assert latest[0]["ticker"] == "MU"
+    assert latest[0]["id"] == max(s["id"] for s in full)
 
 
 def test_scheduled_sweep_covers_all_users(api):

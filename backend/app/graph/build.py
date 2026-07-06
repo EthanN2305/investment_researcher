@@ -2,10 +2,11 @@
 
 Topology:
 
-    planner ──Send──▶ news ─────┐
-            ──Send──▶ financials ─▶ gather ─▶ (valuation?) ─▶ (portfolio?)
-            ──Send──▶ technicals ┘                                │
-                                                       recommend ─▶ END
+    planner ──Send──▶ news ──────┐
+            ──Send──▶ financials ─┤
+            ──Send──▶ technicals ─▶ gather ─▶ (valuation?) ─▶ (portfolio?)
+            ──Send──▶ risk ──────┤                                │
+            ──Send──▶ comps ─────┘                     recommend ─▶ END
 
 - The planner fans out ONLY to the agents in its plan (dynamic Send edges).
 - Stage-1 agents run in parallel in one superstep; `gather` joins them.
@@ -29,7 +30,9 @@ from langgraph.types import Send
 
 from app.agents import (
     FinancialStatementAgent,
+    MarketRiskAgent,
     NewsAgent,
+    PeerComparisonAgent,
     PortfolioManagerAgent,
     RecommendationAgent,
     TechnicalAnalysisAgent,
@@ -53,6 +56,8 @@ _AGENT_LABELS = {
     "news": "Reading news",
     "financials": "Fetching SEC financials",
     "technicals": "Analyzing technicals",
+    "risk": "Measuring market risk",
+    "comps": "Benchmarking against peers",
     "valuation": "Computing valuation",
     "portfolio": "Checking portfolio fit",
     "recommendation": "Synthesizing recommendation",
@@ -97,6 +102,8 @@ def build_graph(
     news_agent = NewsAgent(news, llm)
     fin_agent = FinancialStatementAgent(financials)
     tech_agent = TechnicalAnalysisAgent(prices)
+    risk_agent = MarketRiskAgent(prices)
+    comps_agent = PeerComparisonAgent(market, llm)
     val_agent = ValuationAgent(market)
     port_agent = PortfolioManagerAgent(market)
     rec_agent = RecommendationAgent(llm)
@@ -167,6 +174,10 @@ def build_graph(
     )
     builder.add_node(
         "technicals", _guarded("technicals", lambda s: tech_agent.run(s["ticker"]))
+    )
+    builder.add_node("risk", _guarded("risk", lambda s: risk_agent.run(s["ticker"])))
+    builder.add_node(
+        "comps", _guarded("comps", lambda s: comps_agent.run(s["ticker"]))
     )
     builder.add_node("gather", gather_node)
     builder.add_node("valuation", _guarded("valuation", run_valuation))

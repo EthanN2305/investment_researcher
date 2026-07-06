@@ -10,6 +10,7 @@ import AgentProgress from "./components/AgentProgress.jsx";
 import AlertsConfig from "./components/AlertsConfig.jsx";
 import AuthForm from "./components/AuthForm.jsx";
 import DigestSettings from "./components/DigestSettings.jsx";
+import LearnPanel from "./components/LearnPanel.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
 import PortfolioDashboard from "./components/PortfolioDashboard.jsx";
 import PortfolioPanel from "./components/PortfolioPanel.jsx";
@@ -24,6 +25,7 @@ import WatchlistPanel from "./components/WatchlistPanel.jsx";
 const TABS = [
   ["research", "Research"],
   ["recommendations", "Recommendations"],
+  ["learn", "Learn"],
   ["feed", "Daily Feed"],
   ["watchlist", "Watchlist"],
   ["alerts", "Alerts"],
@@ -238,6 +240,8 @@ export default function App() {
         </>
       ) : view === "recommendations" ? (
         <RecommendationsPanel onResearch={startRun} />
+      ) : view === "learn" ? (
+        <LearnPanel />
       ) : view === "watchlist" ? (
         <WatchlistPanel onResearch={startRun} />
       ) : view === "feed" ? (
