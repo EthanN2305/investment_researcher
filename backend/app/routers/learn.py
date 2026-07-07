@@ -50,7 +50,7 @@ _RENDER_TIMEOUT_S = 15 * 60
 _ALLOWED_DURATIONS = (30, 65)  # seconds: 30s and 1m05s
 # Bump when the narration script, voice, or composition changes so stale cached
 # voiceover clips / MP4s are bypassed instead of reused.
-_CACHE_VERSION = "v2"
+_CACHE_VERSION = "v5"  # v5: switch to Edge neural voice (human, Siri-grade)
 
 
 class StockOfTheDayOut(BaseModel):

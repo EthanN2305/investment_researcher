@@ -921,33 +921,73 @@ function NewsScene({ news = [], duration = 138 }) {
   );
 }
 
-// Cut a sentence at a word boundary so cards never run past the frame.
+// Cut at a word boundary so a card never runs past the frame. Reasons are
+// authored short, so this is just a safety net — it should rarely fire.
 function clip(s, max) {
   if (s.length <= max) return s;
   const cut = s.slice(0, max);
   return `${cut.slice(0, cut.lastIndexOf(" "))}…`;
 }
 
-function WhyScene({ reasons, summary, long = false, duration = 240 }) {
-  const maxReasons = long ? 5 : 3;
+// Build punchy, self-contained reason cards straight from the pick's numbers,
+// used whenever structured reasons aren't supplied (e.g. a lightweight preview
+// pick). Never splits prose — so nothing shows up cut off or as a fragment.
+function reasonsFromSignals({ stance, confidence, momentum3mo, screenScore, rank }) {
+  const out = [];
+  if (momentum3mo != null) {
+    const p = `${momentum3mo >= 0 ? "+" : ""}${(momentum3mo * 100).toFixed(1)}%`;
+    if (momentum3mo >= 0.15)
+      out.push({ icon: "🚀", label: "Strong momentum", text: `Up ${p} in 3 months` });
+    else if (momentum3mo >= 0.03)
+      out.push({ icon: "📈", label: "Uptrend", text: `Up ${p} in 3 months` });
+    else if (momentum3mo <= -0.05)
+      out.push({ icon: "📉", label: "Under pressure", text: `Down ${p} in 3 months` });
+    else
+      out.push({ icon: "➡️", label: "Range-bound", text: `Flat (${p}) in 3 months` });
+  }
+  if (screenScore != null)
+    out.push({ icon: "🎯", label: "Top screen score", text: `${screenScore.toFixed(1)} out of 10` });
+  const sw =
+    stance === "bullish" ? "Agents bullish"
+    : stance === "bearish" ? "Agents cautious"
+    : "Agents mixed";
+  if (confidence != null)
+    out.push({ icon: "🤖", label: sw, text: `${Math.round(confidence * 100)}% confidence` });
+  if (rank != null)
+    out.push({ icon: "🏆", label: "Top-10 pick", text: `Ranked #${rank} today` });
+  return out;
+}
 
-  // Prefer structured reasons; fall back to splitting the agent summary.
-  let cards = (reasons || []).slice(0, maxReasons).map((r) => ({
-    icon: r.icon || "•",
-    label: r.label || "",
-    text: clip(r.text || "", long ? 150 : 120),
-  }));
+function WhyScene({
+  reasons,
+  long = false,
+  duration = 240,
+  stance,
+  confidence,
+  momentum3mo,
+  screenScore,
+  rank,
+}) {
+  const maxReasons = long ? 5 : 4;
+
+  // Prefer the structured reasons; otherwise synthesize clean ones from the
+  // numbers. Either way, cards are short and self-contained.
+  const source =
+    reasons && reasons.length
+      ? reasons
+      : reasonsFromSignals({ stance, confidence, momentum3mo, screenScore, rank });
+
+  let cards = source
+    .filter((r) => (r.label || r.text))
+    .slice(0, maxReasons)
+    .map((r) => ({
+      icon: r.icon || "✅",
+      label: r.label || "",
+      text: clip((r.text || "").trim(), 64),
+    }));
 
   if (cards.length === 0) {
-    const sentences = (summary || "")
-      .split(/(?<=[.!?])\s+/)
-      .filter(Boolean)
-      .slice(0, maxReasons)
-      .map((s) => clip(s, long ? 140 : 120));
-    cards = (sentences.length
-      ? sentences
-      : ["The agents flagged this one on technicals and valuation."]
-    ).map((s) => ({ icon: "✅", label: "", text: s }));
+    cards = [{ icon: "✅", label: "AI-screened", text: "Flagged on technicals" }];
   }
 
   const step = Math.max(
@@ -1188,7 +1228,16 @@ export default function StockVideo({
     ),
     news: <NewsScene news={news} duration={T.news} />,
     why: (
-      <WhyScene reasons={reasons} summary={summary} long={long} duration={T.why} />
+      <WhyScene
+        reasons={reasons}
+        long={long}
+        stance={stance}
+        confidence={confidence}
+        momentum3mo={momentum_3mo}
+        screenScore={screen_score}
+        rank={rank}
+        duration={T.why}
+      />
     ),
     confidence: (
       <ConfidenceScene confidence={confidence} rank={rank} duration={T.confidence} />

@@ -185,8 +185,9 @@ def recent_news(ticker: str, limit: int = 3) -> list[dict]:
 # --- "why the AI picked it" reasons ------------------------------------------
 
 def why_reasons(pick, details: dict | None = None) -> list[dict]:
-    """Structured, grounded reasons — each a short label + one-line explanation
-    built from the pick's real signals. Ordered strongest-first."""
+    """Structured, grounded reasons — each a punchy label + a tight one-line
+    fact built from the pick's real signals. Kept short so nothing ever gets
+    truncated on a card. Ordered strongest-first."""
     details = details or {}
     m = pick.momentum_3mo or 0.0
     conf = round((pick.confidence or 0.0) * 100)
@@ -196,45 +197,46 @@ def why_reasons(pick, details: dict | None = None) -> list[dict]:
     if pick.momentum_3mo is not None:
         if m >= 0.15:
             reasons.append({"icon": "🚀", "label": "Strong momentum",
-                            "text": f"Up {_pct(m)} over the last 3 months."})
+                            "text": f"Up {_pct(m)} in 3 months"})
         elif m >= 0.03:
             reasons.append({"icon": "📈", "label": "Uptrend",
-                            "text": f"Firming up, {_pct(m)} in 3 months."})
+                            "text": f"Up {_pct(m)} in 3 months"})
         elif m <= -0.05:
             reasons.append({"icon": "📉", "label": "Under pressure",
-                            "text": f"Down {_pct(m)} over 3 months — watch closely."})
+                            "text": f"Down {_pct(m)} in 3 months"})
         else:
             reasons.append({"icon": "➡️", "label": "Range-bound",
-                            "text": f"Roughly flat ({_pct(m)}) over 3 months."})
+                            "text": f"Flat ({_pct(m)}) in 3 months"})
 
     # 2) Technical screen
     reasons.append({
-        "icon": "🎯", "label": "Screen score",
-        "text": f"Scores {pick.screen_score:.1f} on the technical screen "
-                f"— top of a 600+ stock universe.",
+        "icon": "🎯", "label": "Top screen score",
+        "text": f"{pick.screen_score:.1f} out of 10",
     })
 
     # 3) Agent stance + confidence
     stance = (pick.stance or "neutral").lower()
-    stance_word = {"bullish": "bullish", "bearish": "cautious",
-                   "neutral": "mixed"}.get(stance, "mixed")
+    stance_word = {"bullish": "Agents bullish", "bearish": "Agents cautious",
+                   "neutral": "Agents mixed"}.get(stance, "Agents mixed")
     reasons.append({
-        "icon": "🤖", "label": "Agent view",
-        "text": f"The AI agents are {stance_word} with {conf}% confidence.",
+        "icon": "🤖", "label": stance_word,
+        "text": f"{conf}% confidence",
     })
 
     # 4) Valuation / sector color when we have it
     if details.get("sector"):
         pe = details.get("pe_ratio")
-        industry = details.get("industry")
-        where = industry or details["sector"]
-        if pe:
-            reasons.append({"icon": "🏭", "label": details["sector"],
-                            "text": f"Trades at a {pe}× P/E in the "
-                                    f"{where} space."})
-        else:
-            reasons.append({"icon": "🏭", "label": details["sector"],
-                            "text": f"A {where} player."})
+        reasons.append({
+            "icon": "🏭", "label": details["sector"],
+            "text": (f"{pe}× P/E" if pe else (details.get("industry") or "")),
+        })
+
+    # 5) Rank
+    if getattr(pick, "rank", None):
+        reasons.append({
+            "icon": "🏆", "label": "Top-10 pick",
+            "text": f"Ranked #{pick.rank} today",
+        })
 
     return reasons[:5]
 
