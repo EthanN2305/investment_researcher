@@ -48,6 +48,7 @@ from app.tools.base import (
     MarketDataProvider,
     NewsProvider,
     PriceHistoryProvider,
+    ToolTimeoutError,
 )
 
 logger = logging.getLogger("graph")
@@ -73,6 +74,15 @@ def _guarded(name: str, fn: Callable[[ResearchState], AgentReport]):
                              "message": f"{_AGENT_LABELS.get(name, name)}…"})
         try:
             report = fn(state)
+        except ToolTimeoutError as exc:
+            # Distinct from a generic failure so the report can say coverage is
+            # missing because an upstream call timed out (Phase 1.4).
+            logger.warning("agent %s timed out for %s: %s", name, state["ticker"], exc)
+            report = AgentReport(
+                agent=name, status="failed", flags=[f"{name}_timeout"]
+            )
+            events.emit(run_id, {"type": "status", "agent": name, "state": "failed",
+                                 "message": f"timed out: {str(exc)[:180]}"})
         except Exception as exc:  # noqa: BLE001 — isolate agent failures
             logger.warning("agent %s failed for %s: %s", name, state["ticker"], exc)
             report = AgentReport(

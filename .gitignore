@@ -36,6 +36,12 @@ massive_daily_cache.json
 # Database (Phase 3)
 *.db
 *.sqlite3
+# SQLite WAL sidecar files (Phase 1.5)
+*.db-wal
+*.db-shm
 
 videos/
 brand/
+
+.claude
+improvement-plan/

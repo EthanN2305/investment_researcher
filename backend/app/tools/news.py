@@ -13,7 +13,7 @@ import httpx
 
 from app.config import settings
 from app.models import NewsItem
-from app.tools.base import ToolError
+from app.tools.base import ToolError, ToolTimeoutError
 
 _ENDPOINT = "https://newsapi.org/v2/everything"
 
@@ -39,6 +39,8 @@ class NewsAPINews:
 
         try:
             resp = httpx.get(_ENDPOINT, params=params, timeout=15.0)
+        except httpx.TimeoutException as exc:
+            raise ToolTimeoutError(f"News request timed out: {exc}") from exc
         except httpx.HTTPError as exc:
             raise ToolError(f"News request failed: {exc}") from exc
 

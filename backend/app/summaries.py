@@ -124,12 +124,17 @@ def run_pipeline_headless(
     if portfolio_context:
         payload["portfolio_context"] = portfolio_context
 
-    result = graph.invoke(payload, config)
-    for _ in range(_MAX_INTERRUPT_RESUMES):
-        if not (isinstance(result, dict) and result.get("__interrupt__")):
-            break
-        result = graph.invoke(Command(resume=ticker), config)
-    return result.get("final_report") if isinstance(result, dict) else None
+    try:
+        result = graph.invoke(payload, config)
+        for _ in range(_MAX_INTERRUPT_RESUMES):
+            if not (isinstance(result, dict) and result.get("__interrupt__")):
+                break
+            result = graph.invoke(Command(resume=ticker), config)
+        return result.get("final_report") if isinstance(result, dict) else None
+    finally:
+        # No SSE subscriber for headless runs, so free the history immediately
+        # rather than leaking it for the process lifetime (Phase 1.3).
+        events.unregister(run_id)
 
 
 def latest_stored_report(

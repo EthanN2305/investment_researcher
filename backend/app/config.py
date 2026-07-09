@@ -17,6 +17,20 @@ class Settings(BaseSettings):
     massive_api_key: str = ""
     massive_base_url: str = "https://api.massive.com"
     cors_origins: str = "http://localhost:5173"
+
+    # Phase 1 — concurrency & stability.
+    # Bounded run pool: at most run_max_workers runs execute agents at once;
+    # up to run_max_queued more may wait. Requests past that get HTTP 429.
+    run_max_workers: int = 4
+    run_max_queued: int = 8
+    # Finished (done/error) runs and their event history are evicted this many
+    # minutes after they finish, so memory stays flat over a long soak.
+    run_ttl_minutes: int = 30
+    run_sweep_seconds: int = 300  # how often the eviction sweep runs
+    # Outbound-call budgets. The Anthropic SDK retries transient errors itself.
+    llm_timeout_seconds: float = 60.0
+    llm_max_retries: int = 2
+
     # Phase 3 — persistence & auth. SQLite by default (zero setup); swap to
     # e.g. postgresql+psycopg://user:pass@host/dbname when needed.
     database_url: str = "sqlite:///./investment.db"

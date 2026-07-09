@@ -13,6 +13,7 @@ import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 
 from app.config import settings
@@ -47,7 +48,9 @@ def run_daily_summaries(graph, prices: PriceHistoryProvider) -> int:
     return total
 
 
-def start_scheduler(graph, prices: PriceHistoryProvider) -> BackgroundScheduler | None:
+def start_scheduler(
+    graph, prices: PriceHistoryProvider, run_manager=None
+) -> BackgroundScheduler | None:
     if not settings.scheduler_enabled:
         logger.info("scheduler disabled (SCHEDULER_ENABLED=false)")
         return None
@@ -64,6 +67,17 @@ def start_scheduler(graph, prices: PriceHistoryProvider) -> BackgroundScheduler 
         coalesce=True,            # missed runs (laptop asleep) collapse to one
         misfire_grace_time=3600,
     )
+    # Phase 1.3: evict finished runs + their event history on a TTL, so memory
+    # stays flat over a long soak. Runs in-process on the same scheduler rather
+    # than a bespoke timer thread.
+    if run_manager is not None:
+        scheduler.add_job(
+            run_manager.sweep,
+            IntervalTrigger(seconds=settings.run_sweep_seconds),
+            id="evict_finished_runs",
+            max_instances=1,
+            coalesce=True,
+        )
     scheduler.start()
     logger.info(
         "daily summary job scheduled for %02d:%02d UTC",

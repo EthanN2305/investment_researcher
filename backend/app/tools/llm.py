@@ -12,11 +12,11 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from anthropic import Anthropic
+from anthropic import Anthropic, APITimeoutError
 
 from app.config import settings
 from app.models import AgentReport, Claim, MarketData, NewsItem, Recommendation
-from app.tools.base import ToolError
+from app.tools.base import ToolError, ToolTimeoutError
 
 # Framing follows Anthropic's financial-services reference agents: the model
 # drafts analyst work product staged for human review — it does not advise,
@@ -83,7 +83,13 @@ class AnthropicLLM:
         key = api_key if api_key is not None else settings.anthropic_api_key
         if not key:
             raise ToolError("ANTHROPIC_API_KEY is not set; cannot generate report.")
-        self._client = Anthropic(api_key=key)
+        # Phase 1.4: bound every LLM call and let the SDK retry transient errors
+        # natively, so a hung upstream can't pin a worker indefinitely.
+        self._client = Anthropic(
+            api_key=key,
+            timeout=settings.llm_timeout_seconds,
+            max_retries=settings.llm_max_retries,
+        )
         self._model = model or settings.anthropic_model
 
     def generate_claims(
@@ -100,6 +106,8 @@ class AnthropicLLM:
                 tool_choice={"type": "tool", "name": "emit_research_report"},
                 messages=[{"role": "user", "content": evidence}],
             )
+        except APITimeoutError as exc:
+            raise ToolTimeoutError(f"LLM request timed out: {exc}") from exc
         except Exception as exc:  # noqa: BLE001 - normalize SDK/network errors
             raise ToolError(f"LLM request failed: {exc}") from exc
 
@@ -210,7 +218,16 @@ class AnthropicAgentLLM:
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         self._key = api_key if api_key is not None else settings.anthropic_api_key
         self._model = model or settings.anthropic_model
-        self._client = Anthropic(api_key=self._key) if self._key else None
+        # Phase 1.4: timeout + native retries (see AnthropicLLM).
+        self._client = (
+            Anthropic(
+                api_key=self._key,
+                timeout=settings.llm_timeout_seconds,
+                max_retries=settings.llm_max_retries,
+            )
+            if self._key
+            else None
+        )
 
     def claims_from_news(self, ticker: str, news: list[NewsItem]) -> list[Claim]:
         if not news:
@@ -325,6 +342,8 @@ class AnthropicAgentLLM:
                 tool_choice={"type": "tool", "name": tool["name"]},
                 messages=[{"role": "user", "content": prompt}],
             )
+        except APITimeoutError as exc:
+            raise ToolTimeoutError(f"LLM request timed out: {exc}") from exc
         except Exception as exc:  # noqa: BLE001
             raise ToolError(f"LLM request failed: {exc}") from exc
         for block in resp.content:

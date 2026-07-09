@@ -16,7 +16,7 @@ import httpx
 
 from app.config import settings
 from app.models import Financials
-from app.tools.base import ToolError
+from app.tools.base import ToolError, ToolTimeoutError
 
 logger = logging.getLogger("edgar")
 
@@ -135,6 +135,8 @@ class SecEdgarFinancials:
     def _get_json(self, url: str) -> dict:
         try:
             resp = httpx.get(url, headers=self._headers, timeout=self._timeout)
+        except httpx.TimeoutException as exc:
+            raise ToolTimeoutError(f"EDGAR request timed out: {exc}") from exc
         except httpx.HTTPError as exc:
             raise ToolError(f"EDGAR request failed: {exc}") from exc
         if resp.status_code == 429:

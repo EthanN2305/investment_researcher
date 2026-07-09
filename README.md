@@ -155,8 +155,11 @@ Get keys: [Anthropic](https://console.anthropic.com/) ·
 (set `SEC_USER_AGENT` contact info in `.env` per their fair-access policy).
 
 Phase 3 storage needs no setup: a SQLite file (`backend/investment.db`) is
-created on first boot. Set `DATABASE_URL` in `.env` to use Postgres instead,
-and set a real `JWT_SECRET` for anything beyond local development.
+created on first boot. SQLite runs in WAL mode with a busy-timeout so the
+request threads, the run pool, and the scheduler job can write concurrently
+without `database is locked`. That is enough for a single node; **beyond one
+node, set `DATABASE_URL` to Postgres** (`postgresql+psycopg://…`) — the swap is
+already wired. Set a real `JWT_SECRET` for anything beyond local development.
 
 ### 2. Frontend
 

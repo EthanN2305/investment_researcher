@@ -42,7 +42,7 @@ from app.routers import (
     watchlist_router,
 )
 from app.routers.portfolio import load_portfolio_context
-from app.runs import RunManager
+from app.runs import RunManager, RunPoolFull
 from app.scheduler import start_scheduler
 from app.tools import (
     AnthropicAgentLLM,
@@ -104,13 +104,15 @@ app.include_router(create_recommendations_router(_graph))
 app.include_router(learn_router)
 
 # Phase 4: in-process APScheduler daily-summary job (no broker needed).
-_scheduler = start_scheduler(_graph, _prices)
+# Phase 1.3: the same scheduler also runs the finished-run eviction sweep.
+_scheduler = start_scheduler(_graph, _prices, run_manager=runs)
 
 
 @app.on_event("shutdown")
-def _shutdown_scheduler() -> None:
+def _shutdown() -> None:
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
+    runs.shutdown()
 
 
 class StartRequest(BaseModel):
@@ -161,7 +163,11 @@ def start_research(
         portfolio_context = load_portfolio_context(db, user).model_dump()
         personalized = True
 
-    run_id = runs.start(ticker, depth, req.lens, portfolio_context)
+    try:
+        run_id = runs.start(ticker, depth, req.lens, portfolio_context)
+    except RunPoolFull as exc:
+        # Backpressure: the pool + backlog are saturated (Phase 1.2).
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     return {"run_id": run_id, "ticker": ticker, "personalized": personalized}
 
 

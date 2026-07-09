@@ -35,6 +35,15 @@ class RateLimitError(ToolError):
     """
 
 
+class ToolTimeoutError(ToolError):
+    """Raised when an outbound call exceeds its timeout budget (Phase 1.4).
+
+    Distinct from a generic ToolError so the graph can surface an
+    `<agent>_timeout` flag — telling the reader *why* coverage is missing —
+    rather than a generic `<agent>_unavailable`.
+    """
+
+
 @runtime_checkable
 class MarketDataProvider(Protocol):
     name: str
