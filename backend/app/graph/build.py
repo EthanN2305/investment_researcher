@@ -108,7 +108,11 @@ def build_graph(
     prices: PriceHistoryProvider,
     llm: AgentLLMProvider,
     checkpointer=None,
+    calibrator_provider=None,
 ):
+    # Phase 4: `calibrator_provider` (a zero-arg callable → active Calibrator or
+    # None) is injected into the Recommendation Agent so derived confidence is
+    # mapped through fitted parameters when available; None → cold start.
     news_agent = NewsAgent(news, llm)
     fin_agent = FinancialStatementAgent(financials)
     tech_agent = TechnicalAnalysisAgent(prices)
@@ -116,7 +120,7 @@ def build_graph(
     comps_agent = PeerComparisonAgent(market, llm)
     val_agent = ValuationAgent(market)
     port_agent = PortfolioManagerAgent(market)
-    rec_agent = RecommendationAgent(llm)
+    rec_agent = RecommendationAgent(llm, calibrator_provider=calibrator_provider)
 
     def route_stage1(state: ResearchState):
         stage1 = [a for a in state["plan"] if a in STAGE1_AGENTS]

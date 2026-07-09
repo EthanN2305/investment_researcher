@@ -92,6 +92,25 @@ def start_scheduler(
             max_instances=1,
             coalesce=True,
         )
+    # Phase 4: resolve matured recommendation outcomes, then periodically re-fit
+    # the confidence calibration from the resolved set.
+    from app import calibration
+
+    scheduler.add_job(
+        calibration.backfill_outcomes,
+        IntervalTrigger(hours=settings.calibration_backfill_hours),
+        args=[prices],
+        id="calibration_backfill",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        calibration.refit,
+        IntervalTrigger(hours=settings.calibration_refit_hours),
+        id="calibration_refit",
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.start()
     logger.info(
         "daily summary job scheduled for %02d:%02d UTC",

@@ -1045,6 +1045,98 @@ body {
   line-height: 1.5;
 }
 
+/* Phase 4 — confidence calibration */
+.calibration-coldstart {
+  margin: 0.7rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted-2);
+  line-height: 1.5;
+}
+
+.calibration-card {
+  margin-top: 0.8rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.calibration-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.calibration-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.reliability-svg {
+  display: block;
+  width: 240px;
+  max-width: 100%;
+  height: auto;
+  margin: 0.6rem auto;
+}
+
+.reliability-box {
+  fill: none;
+  stroke: var(--border);
+}
+
+.reliability-diag {
+  stroke: var(--border-strong);
+  stroke-dasharray: 3 3;
+}
+
+.reliability-line {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.reliability-dot {
+  fill: var(--accent);
+}
+
+.reliability-axis {
+  fill: var(--muted-2);
+  font-size: 9px;
+}
+
+.calibration-agents {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.calibration-agent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.83rem;
+}
+
+.calibration-agent-stat {
+  color: var(--muted);
+}
+
+.calibration-agent-stat em {
+  color: var(--muted-2);
+  font-style: normal;
+}
+
+.calibration-caveat {
+  margin: 0.6rem 0 0;
+  font-size: 0.76rem;
+  color: var(--muted-2);
+  line-height: 1.5;
+}
+
 /* Panels shared */
 .panel-note {
   margin: 0.2rem 0 0.9rem;

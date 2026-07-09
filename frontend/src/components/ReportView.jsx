@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ClaimCard, { ConfidenceBar } from "./ClaimCard.jsx";
 import { AGENT_LABELS } from "./AgentProgress.jsx";
+import CalibrationCard from "./CalibrationCard.jsx";
 
 const FLAG_LABELS = {
   missing_news: "News source unavailable",
@@ -71,6 +72,8 @@ function ConfidenceBreakdown({ recommendation }) {
               {recommendation.confidence_rationale}
             </p>
           )}
+          {/* Phase 4: reliability curve — how well past confidence held up. */}
+          <CalibrationCard />
         </div>
       )}
     </div>

@@ -291,6 +291,14 @@ def run_summary_for_ticker(
     db.add(stored)
     db.commit()
 
+    # Phase 4: snapshot this prediction as a pending outcome for calibration.
+    try:
+        from app.calibration import create_pending_outcome
+
+        create_pending_outcome(db, stored, report)
+    except Exception as exc:  # noqa: BLE001 — calibration must never break a run
+        logger.info("could not create outcome row for %s: %s", ticker, exc)
+
     # Alerts run against the fresh report, diffed with the previous one.
     from app.alerts_engine import process_alerts_for_report
 

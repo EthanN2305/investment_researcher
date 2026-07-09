@@ -45,6 +45,61 @@ on top of Phase 3's accounts/portfolios and the Phase 2 LangGraph planner.
   blended with the synthesis model's self-estimate — and the report shows the
   per-agent breakdown plus a plain-English rationale ("Why 72% confident?").
 
+## Confidence calibration — closing the loop
+
+The derived confidence above is only as good as its hand-tuned weights until
+it's checked against reality. This closes that loop: it scores past
+recommendations against realized outcomes and, once enough have resolved,
+replaces the hand-tuned number with an empirically fitted one.
+
+**Methodology**
+
+- **Snapshot.** When a daily-summary report is stored, a *pending*
+  `report_outcomes` row records the stance, the shown confidence, the
+  *uncalibrated* `prior_confidence`, and the derivation features (coverage,
+  disagreement spread, LLM self-estimate) at prediction time.
+- **Resolve.** A scheduled backfill (`CALIBRATION_BACKFILL_HOURS`, default 6h)
+  resolves each pending row once its horizon has elapsed: it compares the
+  ticker's forward total return to a benchmark (`CALIBRATION_BENCHMARK`,
+  default `SPY`) over `CALIBRATION_HORIZON_DAYS` (default 30) **trading** days,
+  using a strictly forward price window (no lookahead). A `bullish` call is
+  correct if it beat the benchmark by more than a ±band
+  (`CALIBRATION_BAND_PCT`, default 2%), `bearish` if it trailed by more,
+  `neutral` if it stayed within the band.
+- **Measure.** From the resolved (predicted, correct) pairs it computes a
+  **Brier score** (overall, and against the uncalibrated prior for comparison),
+  a **reliability curve** (predicted vs observed hit rate per decile), and
+  **per-agent** stated-vs-realized rates — the sentence that justifies or
+  corrects a weight, e.g. "news at 0.80 is right 55% of the time."
+- **Fit.** Once `CALIBRATION_MIN_SAMPLES` (default 50) outcomes resolve, a
+  scheduled re-fit (`CALIBRATION_REFIT_HOURS`, default 24h) fits a **Platt
+  scaling** (1-D logistic on `prior_confidence`) and stores it as a versioned,
+  single-active `calibration_fits` row (method, params, N, Brier, through-date).
+  The active fit is loaded process-wide and applied inside `derive_confidence`;
+  the on-report rationale then reads *"Calibrated on N resolved reports through
+  YYYY-MM."*
+- **Cold start & guardrails.** Below the minimum — or if a fit's slope is
+  non-positive (a perverse tiny-N fit) — the pipeline falls back to the
+  hand-tuned prior, unchanged from pre-calibration behavior. The fit always
+  trains on the *uncalibrated* prior, never on its own output (no feedback
+  loop), and the final number is always clamped to `[0.05, 0.95]` — never
+  certainty. A calibration failure never breaks a run.
+- **Surfaced** at `GET /calibration` (aggregate, non-user methodology data) and
+  in the report UI (`CalibrationCard`): reliability curve, Brier, per-agent
+  rates, and the active fit's provenance.
+
+**Limits (read these before trusting a number)**
+
+- **Small N.** Early numbers are computed on tens of outcomes and coarse
+  deciles — indicative, not statistically strong.
+- **Self-selected sample.** Only tickers you watch or hold get scored, so the
+  set carries selection/survivorship bias; it is not a random universe.
+- **Choice-sensitive.** Results depend on the benchmark, band, and horizon; a
+  different benchmark can flip a `neutral` verdict.
+- **Backward-looking.** This is a *backtested description of past agreement*,
+  **not** a prediction of future accuracy — and still not licensed investment
+  advice.
+
 ## What Phase 3 added
 
 Sign up → enter your holdings (ticker, quantity, cost basis) and stated
@@ -95,13 +150,17 @@ Key properties:
 backend/
   app/
     main.py         FastAPI: POST /research (optionally personalized),
-                    SSE /research/{run}/events, /research/{run}/answer, /health
+                    SSE /research/{run}/events, /research/{run}/answer,
+                    /health, /calibration (Phase 4 metrics)
     runs.py         run lifecycle: worker threads, interrupt/resume, SSE
     db.py           SQLAlchemy engine/session (SQLite by default)
     db_models.py    User / Holding / Preferences + WatchlistItem / StoredReport /
-                    AlertRule / Notification ORM tables
+                    AlertRule / Notification / ReportOutcome / CalibrationFit tables
+    calibration.py  Phase 4 confidence calibration: outcome backfill, Brier /
+                    reliability / per-agent metrics, versioned Platt fit
     auth.py         bcrypt hashing, JWT create/verify, auth dependencies
-    scheduler.py    APScheduler daily-summary job (in-process, cron)
+    scheduler.py    APScheduler jobs (in-process): daily summary (cron) +
+                    calibration backfill/refit (interval)
     summaries.py    headless pipeline runs → stored reports (job + run-now)
     alerts_engine.py alert condition evaluation (price move, new claims, news)
     notify.py       in-app notification rows + SMTP email (console fallback)
@@ -127,7 +186,8 @@ backend/
                     price history, Anthropic (structured output)
   tests/            test_smoke (Phase 1), test_phase2 (graph), test_e2e_api (SSE),
                     test_phase3 (auth, CRUD, portfolio agent, personalized runs),
-                    test_phase4 (watchlist, summaries, alerts, derived confidence)
+                    test_phase4 (watchlist, summaries, alerts, derived confidence),
+                    test_phase4_calibration (Brier/reliability/Platt fit, backfill/refit)
 frontend/
   src/App.jsx                     run lifecycle + SSE + auth state + tabs
   src/components/AgentProgress    live per-agent status board
@@ -211,8 +271,9 @@ job runs automatically at `DAILY_SUMMARY_HOUR_UTC` (default 13:30 UTC).
 - Every claim carries evidence + source + confidence.
 - Output is framed as research/education, not personalized advice.
 - Missing/failed data is surfaced as `flags`, never silently filled.
-- Each report is appended to `backend/recommendations_log.jsonl` so
-  recommendations can be checked against outcomes later.
+- Each report is appended to `backend/recommendations_log.jsonl` and snapshotted
+  as a `report_outcomes` row so recommendations are checked against realized
+  outcomes (see [Confidence calibration](#confidence-calibration--closing-the-loop)).
 
 ## Tests
 
@@ -227,6 +288,7 @@ python -m tests.test_phase2     # planner routing, interrupts, failure isolation
 python -m tests.test_e2e_api    # full HTTP run: SSE + question/answer flow
 python -m pytest tests/test_phase3.py  # auth, CRUD, portfolio agent, personalization
 python -m pytest tests/test_phase4.py  # watchlist, summaries job, alerts, confidence
+python -m pytest tests/test_phase4_calibration.py  # Brier/reliability/Platt fit, backfill, refit
 ```
 
 `pytest` is in `requirements.txt`. No API keys needed — all tools are faked.

@@ -27,6 +27,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app import calibration
 from app.auth import _decode_user_id, get_optional_user
 from app.config import settings
 from app.db import get_db, init_db
@@ -103,6 +104,7 @@ _graph = build_graph(
     financials=SecEdgarFinancials(),
     prices=_prices,
     llm=_llm,
+    calibrator_provider=calibration.get_active_calibrator,  # Phase 4
 )
 runs = RunManager(_graph)
 
@@ -151,6 +153,16 @@ def health() -> dict:
         "newsapi_key_set": bool(settings.newsapi_key),
         "scheduler_running": _scheduler is not None and _scheduler.running,
     }
+
+
+@app.get("/calibration")
+def calibration_metrics(db: Session = Depends(get_db)) -> dict:
+    """Phase 4: how well past confidence matched realized outcomes.
+
+    Public methodology transparency (aggregate, non-user data): Brier score,
+    reliability curve, per-agent hit rates, and the active fit's provenance.
+    """
+    return calibration.calibration_report(db)
 
 
 def _run_or_404(run_id: str, viewer_id: int | None):

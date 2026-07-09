@@ -90,6 +90,11 @@ class Recommendation(BaseModel):
     confidence_rationale: str = Field(
         "", description="Human-readable explanation of the derived confidence."
     )
+    # Phase 4: the raw derivation features, persisted so the calibration loop can
+    # fit weights against realized outcomes. Includes `prior_confidence` (the
+    # UNcalibrated derived score — always the fitting feature, so calibration
+    # never feeds on its own output) plus coverage/disagreement/llm inputs.
+    confidence_features: dict[str, float] = Field(default_factory=dict)
 
 
 class FinalReport(BaseModel):

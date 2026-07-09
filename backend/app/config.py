@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     login_max_failures: int = 10
     login_lockout_minutes: int = 15
 
+    # Phase 4 — confidence calibration (close the loop against realized outcomes).
+    calibration_horizon_days: int = 30   # trading days to measure return over
+    calibration_band_pct: float = 2.0    # excess-return band (±%) around the benchmark
+    calibration_benchmark: str = "SPY"   # benchmark ticker for excess return
+    calibration_min_samples: int = 50    # below this, cold-start on hand-tuned prior
+    calibration_backfill_hours: int = 6  # how often to resolve matured outcomes
+    calibration_refit_hours: int = 24    # how often to re-fit from resolved outcomes
+
     # Phase 4 — background jobs & alert email.
     scheduler_enabled: bool = True  # set false in tests/scripts
     daily_summary_hour_utc: int = 13   # 13:30 UTC ≈ just after US market open

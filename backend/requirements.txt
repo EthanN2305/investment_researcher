@@ -16,6 +16,8 @@ PyJWT>=2.8
 apscheduler>=3.10,<4.0
 # Phase 2 (security) — per-IP rate limiting on expensive/sensitive endpoints
 limits>=3.0
+# Phase 4 (calibration) — Brier score, reliability curve, Platt-scaling fit
+numpy>=1.26
 # Learn-tab narration — free neural TTS (Microsoft Edge voices, no API key).
 # Falls back to macOS `say` if unavailable/offline.
 edge-tts>=6.1.9

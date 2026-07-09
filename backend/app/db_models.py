@@ -202,6 +202,66 @@ class EmailDigestPreference(Base):
     )
 
 
+class ReportOutcome(Base):
+    """Phase 4: realized outcome of a stored recommendation, for calibration.
+
+    Created pending when a report is stored, then resolved by a scheduled
+    backfill job once the horizon has elapsed: it compares the ticker's total
+    return to a benchmark (SPY) over H trading days and labels the stance
+    correct/incorrect. `features_json` snapshots the derivation inputs
+    (`prior_confidence`, coverage, disagreement, llm self-estimate) at
+    prediction time so the fit never leaks future info.
+    """
+
+    __tablename__ = "report_outcomes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Nullable so an outcome survives eviction of its source row; unique so we
+    # never create two outcomes for the same stored report.
+    stored_report_id: Mapped[int | None] = mapped_column(
+        ForeignKey("stored_reports.id", ondelete="SET NULL"),
+        nullable=True, unique=True, index=True,
+    )
+    ticker: Mapped[str] = mapped_column(String(12), index=True)
+    stance: Mapped[str] = mapped_column(String(16))
+    predicted_confidence: Mapped[float] = mapped_column(Float)  # as shown to the user
+    prior_confidence: Mapped[float] = mapped_column(Float, default=0.5)  # pre-calibration
+    features_json: Mapped[str] = mapped_column(Text, default="{}")
+    prediction_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    horizon_days: Mapped[int] = mapped_column(Integer, default=30)  # trading days
+    benchmark: Mapped[str] = mapped_column(String(12), default="SPY")
+    band_pct: Mapped[float] = mapped_column(Float, default=2.0)  # excess-return band
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    # Filled at resolution:
+    ticker_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    benchmark_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    excess_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class CalibrationFit(Base):
+    """Phase 4: a versioned confidence calibration fitted from resolved outcomes.
+
+    Only one row is `active` at a time. `params_json` holds the fitted
+    coefficients (Platt scaling by default); `brier` is the score on the
+    training set. The active fit is loaded process-wide and applied inside
+    `derive_confidence`; with none present the pipeline cold-starts on the
+    hand-tuned defaults.
+    """
+
+    __tablename__ = "calibration_fits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    method: Mapped[str] = mapped_column(String(24), default="platt")
+    params_json: Mapped[str] = mapped_column(Text, default="{}")
+    n_samples: Mapped[int] = mapped_column(Integer, default=0)
+    brier: Mapped[float | None] = mapped_column(Float, nullable=True)
+    through_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+
+
 class Notification(Base):
     """In-app notification produced when an alert rule fires."""
 

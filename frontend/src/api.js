@@ -168,6 +168,10 @@ export const markNotificationRead = (id) =>
 export const markAllNotificationsRead = () =>
   request("/notifications/read-all", { method: "POST" });
 
+// --- Calibration (Phase 4: how well past confidence matched outcomes) --------------
+
+export const getCalibration = () => request("/calibration");
+
 // --- Recommendations (global top-10 board) -----------------------------------------
 
 export const getRecommendations = () => request("/recommendations");
