@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     env: str = "dev"
 
     anthropic_api_key: str = ""
+    # Overridable via ANTHROPIC_MODEL in .env so a model bump needs no code
+    # change; the default is only a zero-config convenience for local dev.
     anthropic_model: str = "claude-sonnet-5"
     newsapi_key: str = ""
     # Massive.com (formerly Polygon.io) — preferred bulk price source for the

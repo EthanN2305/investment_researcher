@@ -14,16 +14,22 @@ on top of Phase 3's accounts/portfolios and the Phase 2 LangGraph planner.
 - **Watchlists** — track tickers independently of your holdings
   (`/watchlist` CRUD + a dedicated Watchlist tab).
 - **Scheduled daily summaries** — an in-process APScheduler job (first
-  background job in the project) runs the full agent pipeline once daily for
+  background job in the project) runs the agent pipeline once daily for
   every watched/held ticker and **stores** the structured report
   (`stored_reports` table), so the Daily Feed reads instantly without
-  re-running agents. `POST /summaries/run` triggers the identical code path on
-  demand ("Run now" button). Set `DAILY_SUMMARY_HOUR_UTC` /
-  `DAILY_SUMMARY_MINUTE_UTC` to change the schedule; `SCHEDULER_ENABLED=false`
-  disables it.
+  re-running agents. The sweep computes each distinct ticker's
+  non-personalized report **once** and reuses it across users, layering only a
+  cheap per-user portfolio-fit re-synthesis on top — so LLM cost scales with
+  distinct tickers, not users × tickers. `POST /summaries/run` triggers the
+  identical code path on demand ("Run now" button). Set `DAILY_SUMMARY_HOUR_UTC`
+  / `DAILY_SUMMARY_MINUTE_UTC` to change the schedule; `SCHEDULER_ENABLED=false`
+  disables it. **The scheduler is in-process, so it runs once per uvicorn
+  worker — run the API with a single worker (or move the job to a dedicated
+  scheduler process) so the sweep doesn't run N times.**
 - **Alerts** — per-ticker rules: price move beyond ±X%, a *new*
-  high-confidence claim (≥ threshold), or *new* negative news (keyword
-  heuristic). Evaluated after each summary run, diffed against the previous
+  high-confidence claim (≥ threshold), or *new* negative news (driven by the
+  news agent's LLM-emitted `sentiment`, with a keyword heuristic as fallback).
+  Evaluated after each summary run, diffed against the previous
   stored report so the same claim never re-fires. In-app notifications
   (header bell) always; per-rule **email** as a stretch (SMTP via `SMTP_*`
   env vars, console fallback in dev).

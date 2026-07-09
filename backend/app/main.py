@@ -96,12 +96,13 @@ app.add_middleware(
 # about missing keys (agents fail soft with flags), so this always boots.
 _market = YFinanceMarketData()
 _prices = YFinancePriceHistory()
+_llm = AnthropicAgentLLM()
 _graph = build_graph(
     market=_market,
     news=NewsAPINews(),
     financials=SecEdgarFinancials(),
     prices=_prices,
-    llm=AnthropicAgentLLM(),
+    llm=_llm,
 )
 runs = RunManager(_graph)
 
@@ -121,7 +122,9 @@ app.include_router(learn_router)
 # Phase 4: in-process APScheduler daily-summary job (no broker needed).
 # Phase 1.3: the same scheduler also runs the finished-run eviction sweep.
 # Teardown is handled by the `lifespan` handler defined above.
-_scheduler = start_scheduler(_graph, _prices, run_manager=runs)
+_scheduler = start_scheduler(
+    _graph, _prices, run_manager=runs, market=_market, llm=_llm
+)
 
 
 class StartRequest(BaseModel):

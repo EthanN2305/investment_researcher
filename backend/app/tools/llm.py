@@ -151,14 +151,33 @@ class AnthropicLLM:
 
 # --- Phase 2: agent-specific structured LLM calls -----------------------------
 
+# News claims carry an extra `sentiment` field (Phase 3.2) so alerts can key
+# off the LLM's own classification instead of keyword-matching prose — same
+# tool call, zero extra API cost. Built from the base claim schema so the two
+# stay in sync.
+def _news_claim_schema() -> dict:
+    import copy
+
+    schema = copy.deepcopy(_REPORT_TOOL["input_schema"]["properties"]["claims"])
+    item = schema["items"]
+    item["properties"]["sentiment"] = {
+        "type": "string",
+        "enum": ["positive", "neutral", "negative"],
+        "description": "Directional impact on the stock: 'negative' for "
+                       "genuine bad news (guidance cut, lawsuit, downgrade), "
+                       "'positive' for genuine good news, else 'neutral'. Judge "
+                       "the substance, not the presence of scary words.",
+    }
+    item["required"] = [*item["required"], "sentiment"]
+    return schema
+
+
 _NEWS_CLAIMS_TOOL = {
     "name": "emit_news_claims",
     "description": "Emit claims about catalysts/risks found in the news. Call once.",
     "input_schema": {
         "type": "object",
-        "properties": {
-            "claims": _REPORT_TOOL["input_schema"]["properties"]["claims"],
-        },
+        "properties": {"claims": _news_claim_schema()},
         "required": ["claims"],
     },
 }
@@ -250,6 +269,11 @@ class AnthropicAgentLLM:
             "than two weeks old; include the article date in 'evidence'.\n"
             "- Label each claim's direction: start with 'Catalyst:' for likely "
             "positive drivers or 'Risk:' for likely negative ones.\n"
+            "- Set 'sentiment' to the claim's actual impact on the stock — "
+            "'negative' only for genuine bad news (guidance cut, lawsuit, "
+            "downgrade, executive departure), 'positive' for genuine good news, "
+            "'neutral' otherwise. Judge substance, not scary words: 'dismissed "
+            "weak-demand fears' is positive/neutral, not negative.\n"
             "- Quantify wherever the article does (amounts, percentages, dates) — "
             "e.g. 'beat consensus by $120M (3%)' rather than 'beat estimates'.\n"
             "- Headlines are unverified — cap confidence at 0.7 unless multiple "

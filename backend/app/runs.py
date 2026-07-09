@@ -21,6 +21,7 @@ Runs are in-memory only (the final report is persisted separately by
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -260,6 +261,4 @@ class RunManager:
 
 
 def _frame(event: dict) -> str:
-    import json
-
     return f"data: {json.dumps(event, default=str)}\n\n"

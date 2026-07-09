@@ -25,31 +25,45 @@ from app.tools.base import PriceHistoryProvider
 logger = logging.getLogger("scheduler")
 
 
-def run_daily_summaries(graph, prices: PriceHistoryProvider) -> int:
+def run_daily_summaries(
+    graph, prices: PriceHistoryProvider, market=None, llm=None
+) -> int:
     """One full sweep: every user, every watched/held ticker. Returns count.
 
     After each user's reports are stored, their email digest goes out if
     today matches their chosen cadence (daily / weekly / monthly).
+
+    Phase 3.3: a single `shared_cache` spans the whole sweep, so each distinct
+    ticker's non-personalized report is computed once and reused across users
+    (when `market` and `llm` are provided). Cost then scales with distinct
+    tickers plus cheap per-user re-syntheses, not users × tickers.
     """
     from app.digest import send_digest_if_due
 
     total = 0
+    shared_cache: dict = {}
     db = SessionLocal()
     try:
         users = db.scalars(select(User)).all()
         logger.info("daily summary sweep starting for %d user(s)", len(users))
         for user in users:
-            stored = run_summaries_for_user(db, user, graph=graph, prices=prices)
+            stored = run_summaries_for_user(
+                db, user, graph=graph, prices=prices,
+                market=market, llm=llm, shared_cache=shared_cache,
+            )
             total += len(stored)
             send_digest_if_due(db, user)
     finally:
         db.close()
-    logger.info("daily summary sweep done: %d report(s) stored", total)
+    logger.info(
+        "daily summary sweep done: %d report(s) across %d distinct ticker(s)",
+        total, len(shared_cache),
+    )
     return total
 
 
 def start_scheduler(
-    graph, prices: PriceHistoryProvider, run_manager=None
+    graph, prices: PriceHistoryProvider, run_manager=None, market=None, llm=None
 ) -> BackgroundScheduler | None:
     if not settings.scheduler_enabled:
         logger.info("scheduler disabled (SCHEDULER_ENABLED=false)")
@@ -61,7 +75,7 @@ def start_scheduler(
             hour=settings.daily_summary_hour_utc,
             minute=settings.daily_summary_minute_utc,
         ),
-        args=[graph, prices],
+        args=[graph, prices, market, llm],
         id="daily_summaries",
         max_instances=1,          # a slow sweep must not overlap the next one
         coalesce=True,            # missed runs (laptop asleep) collapse to one

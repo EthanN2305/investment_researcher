@@ -10,13 +10,31 @@ from pydantic import BaseModel, Field
 
 
 class Claim(BaseModel):
-    """A single, sourced, confidence-scored assertion about a ticker."""
+    """A single, sourced, confidence-scored assertion about a ticker.
+
+    Confidence semantics (Phase 3.4): `confidence` is the probability the claim
+    is TRUE AS STATED given its evidence — nothing else. Deterministic agents
+    (EDGAR math, price-series indicators) therefore emit high, *fixed*
+    confidences (e.g. 0.9) because the arithmetic is certain; the residual just
+    reflects data caveats (stale filings, thin history). It is NOT a measure of
+    how much to trust the source — that lives once, in the Recommendation
+    Agent's per-source reliability weights (`_AGENT_WEIGHTS`). Keeping the two
+    ideas separate is what makes Phase 4 calibration measurable per source.
+    """
 
     claim: str = Field(..., description="The assertion, e.g. 'Revenue grew 12% YoY'.")
     evidence: str = Field(..., description="The concrete data backing the claim.")
     source: str = Field(..., description="URL or filing/source name for the evidence.")
     confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Model confidence in the claim, 0-1."
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Probability the claim is true as stated, given its evidence (0-1).",
+    )
+    # Phase 3.2: news claims carry an LLM-emitted sentiment so alerts don't have
+    # to keyword-match prose. None for non-news / deterministic claims.
+    sentiment: str | None = Field(
+        None, description="'positive' | 'neutral' | 'negative' (news claims only)."
     )
 
 
@@ -49,6 +67,11 @@ class AgentReport(BaseModel):
     status: str = Field(
         "ok", description="'ok' | 'failed' | 'skipped' — failures never crash a run."
     )
+    # Phase 3.1: structured, machine-readable metrics alongside the prose claims
+    # (e.g. technicals emits {"latest_close": 359.91, "sma50": 342.1, "rsi14": 61}).
+    # Downstream code reads these instead of regexing evidence strings, and they
+    # unlock cheap follow-ons (sparklines, RSI alerts).
+    metrics: dict[str, float] = Field(default_factory=dict)
 
 
 class Recommendation(BaseModel):

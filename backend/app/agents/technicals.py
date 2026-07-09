@@ -76,10 +76,19 @@ class TechnicalAnalysisAgent:
         closes = hist.closes
         claims: list[Claim] = []
         flags: list[str] = []
+        # Phase 3.1: structured metrics emitted alongside the prose claims, so
+        # downstream code (price snapshots, sparklines, RSI alerts) reads data
+        # instead of regexing evidence strings.
+        metrics: dict[str, float] = {}
         src = hist.source
         last = closes[-1]
+        metrics["latest_close"] = round(last, 4)
 
         sma50, sma200 = sma(closes, 50), sma(closes, 200)
+        if sma50 is not None:
+            metrics["sma50"] = round(sma50, 4)
+        if sma200 is not None:
+            metrics["sma200"] = round(sma200, 4)
         if sma50 is not None:
             rel = "above" if last > sma50 else "below"
             claims.append(Claim(
@@ -103,6 +112,7 @@ class TechnicalAnalysisAgent:
 
         r = rsi(closes)
         if r is not None:
+            metrics["rsi14"] = round(r, 2)
             zone = "overbought" if r >= 70 else "oversold" if r <= 30 else "neutral"
             claims.append(Claim(
                 claim=f"{ticker}'s 14-day RSI is {r:.0f} ({zone}).",
@@ -112,6 +122,7 @@ class TechnicalAnalysisAgent:
 
         if len(closes) >= 63:  # ~3 trading months
             chg = (last - closes[-63]) / closes[-63]
+            metrics["momentum_3mo"] = round(chg, 4)
             claims.append(Claim(
                 claim=f"{ticker} is {'up' if chg >= 0 else 'down'} {abs(chg):.1%} "
                       f"over the past three months.",
@@ -121,6 +132,7 @@ class TechnicalAnalysisAgent:
 
         vol = annualized_volatility(closes)
         if vol is not None:
+            metrics["annualized_volatility"] = round(vol, 4)
             zone = "low" if vol < 0.20 else "moderate" if vol < 0.40 else "high"
             claims.append(Claim(
                 claim=f"{ticker}'s annualized realized volatility is {vol:.0%} "
@@ -132,6 +144,7 @@ class TechnicalAnalysisAgent:
 
         dd = max_drawdown(closes)
         if dd is not None and dd > 0:
+            metrics["max_drawdown"] = round(dd, 4)
             claims.append(Claim(
                 claim=f"{ticker}'s largest peak-to-trough decline over the "
                       f"period was {dd:.1%}.",
@@ -141,4 +154,4 @@ class TechnicalAnalysisAgent:
 
         if not claims:
             flags.append("no_technical_claims")
-        return AgentReport(agent=AGENT_ID, claims=claims, flags=flags)
+        return AgentReport(agent=AGENT_ID, claims=claims, flags=flags, metrics=metrics)

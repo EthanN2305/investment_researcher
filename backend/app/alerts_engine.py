@@ -9,8 +9,10 @@ Three conditions (Phase 4 scope):
                          was NOT in the previous stored report
 
 "New vs previous report" comparison keeps daily alerts from re-firing on the
-same claim every day. The negative-news check is a keyword heuristic —
-deliberately simple and transparent rather than another LLM call.
+same claim every day. The negative-news check prefers the LLM-emitted
+`sentiment` field on each news claim (Phase 3.2); the keyword heuristic below
+is a transparent fallback for claims that carry no sentiment (old stored
+reports, or the no-LLM path).
 """
 from __future__ import annotations
 
@@ -21,12 +23,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db_models import AlertRule, User
-from app.models import ALERT_DEFAULT_THRESHOLDS, FinalReport
+from app.models import ALERT_DEFAULT_THRESHOLDS, Claim, FinalReport
 from app.notify import create_notification
 from app.tools.base import PriceHistoryProvider
 
 logger = logging.getLogger("alerts")
 
+# Fallback heuristic only — used when a news claim has no structured sentiment.
 NEGATIVE_KEYWORDS = (
     "lawsuit", "investigation", "probe", "recall", "layoff", "miss", "missed",
     "decline", "declined", "drop", "dropped", "fell", "plunge", "downgrade",
@@ -52,9 +55,21 @@ def _claim_texts(report: FinalReport | None) -> set[str]:
     }
 
 
-def _is_negative(text: str) -> bool:
+def _keyword_negative(text: str) -> bool:
     lowered = text.lower()
     return any(kw in lowered for kw in NEGATIVE_KEYWORDS)
+
+
+def _is_negative(claim: Claim) -> bool:
+    """True if a news claim is negative.
+
+    Phase 3.2: trust the LLM's structured `sentiment` when present (it judged
+    substance over keywords); fall back to the keyword heuristic only for
+    claims with no sentiment (legacy reports / no-LLM path).
+    """
+    if claim.sentiment is not None:
+        return claim.sentiment == "negative"
+    return _keyword_negative(claim.claim)
 
 
 def latest_price_move_pct(prices: PriceHistoryProvider, ticker: str) -> float | None:
@@ -128,7 +143,7 @@ def evaluate_rules(
             )
             fresh_negative = [
                 c for c in (news.claims if news else [])
-                if _is_negative(c.claim)
+                if _is_negative(c)
                 and c.claim.strip().lower() not in known_claims
             ]
             if fresh_negative:
