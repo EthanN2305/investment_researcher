@@ -21,8 +21,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
+from app.config import settings
 from app.db import get_db
 from app.db_models import RecommendationItem, User
+from app.ratelimit import RateLimit
 from app.recommender import run_recommendations
 from app.universe import UNIVERSE
 
@@ -133,7 +135,11 @@ def create_recommendations_router(graph, session_factory=None) -> APIRouter:
             items=[_item_out(r) for r in items],
         )
 
-    @router.post("/recommendations/run", status_code=202)
+    @router.post(
+        "/recommendations/run",
+        status_code=202,
+        dependencies=[Depends(RateLimit(settings.rate_limit_run_now, "recs_run"))],
+    )
     def start_run(user: User = Depends(get_current_user)) -> dict:
         with _RUN_LOCK:
             if any(j.status == "running" for j in _JOBS.values()):

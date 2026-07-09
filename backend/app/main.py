@@ -27,11 +27,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.auth import get_optional_user
+from app.auth import _decode_user_id, get_optional_user
 from app.config import settings
 from app.db import get_db, init_db
 from app.db_models import User
 from app.graph import build_graph
+from app.ratelimit import RateLimit
 from app.routers import (
     alerts_router,
     auth_router,
@@ -45,6 +46,7 @@ from app.routers import (
 from app.routers.portfolio import load_portfolio_context
 from app.runs import RunManager, RunPoolFull
 from app.scheduler import start_scheduler
+from app.security import check_startup_security
 from app.tools import (
     AnthropicAgentLLM,
     NewsAPINews,
@@ -80,6 +82,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+check_startup_security()  # Phase 2.2: refuse to boot insecurely outside dev
 init_db()  # create SQLite tables on boot (idempotent)
 
 app.add_middleware(
@@ -147,7 +150,25 @@ def health() -> dict:
     }
 
 
-@app.post("/research")
+def _run_or_404(run_id: str, viewer_id: int | None):
+    """Fetch a run, enforcing ownership (Phase 2.4).
+
+    A run started by a logged-in user is visible only to that user; anonymous
+    runs (user_id is None) are guarded by their unguessable run_id. Returns 404
+    rather than 403 on a mismatch so we don't confirm the run exists.
+    """
+    run = runs.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Unknown run id.")
+    if run.user_id is not None and run.user_id != viewer_id:
+        raise HTTPException(status_code=404, detail="Unknown run id.")
+    return run
+
+
+@app.post(
+    "/research",
+    dependencies=[Depends(RateLimit(settings.rate_limit_research, "research"))],
+)
 def start_research(
     req: StartRequest,
     user: User | None = Depends(get_optional_user),
@@ -170,17 +191,22 @@ def start_research(
         personalized = True
 
     try:
-        run_id = runs.start(ticker, depth, req.lens, portfolio_context)
+        run_id = runs.start(
+            ticker, depth, req.lens, portfolio_context,
+            user_id=user.id if user is not None else None,
+        )
     except RunPoolFull as exc:
-        # Backpressure: the pool + backlog are saturated (Phase 1.2).
+        # Backpressure / daily-budget guard (Phase 1.2 + 2.1) → 429.
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     return {"run_id": run_id, "ticker": ticker, "personalized": personalized}
 
 
 @app.get("/research/{run_id}/events")
-def research_events(run_id: str) -> StreamingResponse:
-    if runs.get(run_id) is None:
-        raise HTTPException(status_code=404, detail="Unknown run id.")
+def research_events(run_id: str, token: str | None = None) -> StreamingResponse:
+    # Native EventSource can't send an Authorization header, so a logged-in
+    # client passes its JWT as ?token=... to prove ownership of a bound run.
+    viewer_id = _decode_user_id(token) if token else None
+    _run_or_404(run_id, viewer_id)
     return StreamingResponse(
         runs.sse_events(run_id),
         media_type="text/event-stream",
@@ -189,10 +215,12 @@ def research_events(run_id: str) -> StreamingResponse:
 
 
 @app.post("/research/{run_id}/answer")
-def research_answer(run_id: str, req: AnswerRequest) -> dict:
-    run = runs.get(run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Unknown run id.")
+def research_answer(
+    run_id: str,
+    req: AnswerRequest,
+    user: User | None = Depends(get_optional_user),
+) -> dict:
+    _run_or_404(run_id, user.id if user is not None else None)
     if not runs.answer(run_id, req.answer.strip()):
         raise HTTPException(
             status_code=409, detail="Run is not waiting for an answer."
@@ -201,11 +229,12 @@ def research_answer(run_id: str, req: AnswerRequest) -> dict:
 
 
 @app.get("/research/{run_id}")
-def research_status(run_id: str) -> dict:
+def research_status(
+    run_id: str,
+    user: User | None = Depends(get_optional_user),
+) -> dict:
     """Poll fallback: current status (and report once done)."""
-    run = runs.get(run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Unknown run id.")
+    run = _run_or_404(run_id, user.id if user is not None else None)
     return {
         "run_id": run.run_id,
         "ticker": run.ticker,

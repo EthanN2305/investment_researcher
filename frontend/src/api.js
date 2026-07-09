@@ -256,7 +256,11 @@ export function answerQuestion(runId, answer) {
 // Returns a close() function. The stream stays open across clarifying
 // questions — answers go via POST, progress keeps flowing here.
 export function subscribeToRun(runId, onEvent, onConnectionError) {
-  const es = new EventSource(`/research/${encodeURIComponent(runId)}/events`);
+  // EventSource can't set an Authorization header, so pass the JWT as a query
+  // param — the backend needs it to authorize the stream of a user-bound run.
+  const auth = getAuth();
+  const q = auth ? `?token=${encodeURIComponent(auth.token)}` : "";
+  const es = new EventSource(`/research/${encodeURIComponent(runId)}/events${q}`);
   es.onmessage = (msg) => {
     try {
       const event = JSON.parse(msg.data);

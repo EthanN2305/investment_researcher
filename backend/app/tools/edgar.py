@@ -133,6 +133,15 @@ class SecEdgarFinancials:
         return _MAP_CACHE["map"].get(ticker)
 
     def _get_json(self, url: str) -> dict:
+        # Phase 2.3: SEC fair-access requires a real contact address. Refuse
+        # rather than hammer EDGAR with the placeholder UA (which they may
+        # block anyway); the financials agent turns this into a flag.
+        if "set SEC_USER_AGENT" in settings.sec_user_agent:
+            raise ToolError(
+                "SEC_USER_AGENT is not configured (still the placeholder). "
+                "Set it to 'AppName/version (you@example.com)' in .env to "
+                "enable SEC EDGAR fundamentals."
+            )
         try:
             resp = httpx.get(url, headers=self._headers, timeout=self._timeout)
         except httpx.TimeoutException as exc:

@@ -6,6 +6,9 @@ Two FastAPI dependencies:
 """
 from __future__ import annotations
 
+import threading
+import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -20,6 +23,41 @@ from app.db_models import User
 
 _ALGORITHM = "HS256"
 _bearer = HTTPBearer(auto_error=False)
+
+# --- Phase 2.1: per-email login brute-force lockout ---------------------------
+# In-process (per-worker) record of recent failed-login timestamps per email.
+# Complements the per-IP rate limit: an attacker rotating IPs against one
+# account still trips this. Fine at single-node scale; move to Redis for HA.
+_login_failures: dict[str, list[float]] = defaultdict(list)
+_login_lock = threading.Lock()
+
+
+def _prune(times: list[float], window: float) -> list[float]:
+    cutoff = time.time() - window
+    return [t for t in times if t >= cutoff]
+
+
+def login_is_locked(email: str) -> bool:
+    if not settings.rate_limit_enabled:
+        return False
+    window = settings.login_lockout_minutes * 60
+    with _login_lock:
+        times = _prune(_login_failures.get(email, []), window)
+        _login_failures[email] = times
+        return len(times) >= settings.login_max_failures
+
+
+def record_login_failure(email: str) -> None:
+    window = settings.login_lockout_minutes * 60
+    with _login_lock:
+        times = _prune(_login_failures.get(email, []), window)
+        times.append(time.time())
+        _login_failures[email] = times
+
+
+def clear_login_failures(email: str) -> None:
+    with _login_lock:
+        _login_failures.pop(email, None)
 
 
 def hash_password(password: str) -> str:

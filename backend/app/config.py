@@ -9,6 +9,11 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
+    # Deployment environment. Anything other than "dev" tightens startup
+    # checks (see app.security): the app refuses to boot with the default JWT
+    # secret outside dev (Phase 2.2).
+    env: str = "dev"
+
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
     newsapi_key: str = ""
@@ -36,8 +41,27 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./investment.db"
     jwt_secret: str = "dev-only-secret-change-me-via-dotenv-0123456789"  # ≥32 bytes; override in .env
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
-    # SEC fair-access policy requires a descriptive UA with contact info.
-    sec_user_agent: str = "AI-Investment-Research/0.2 (ngoe5@uci.edu)"
+    # SEC fair-access policy requires a descriptive UA with a real contact
+    # address. Placeholder by default (no PII in tracked source, Phase 2.3);
+    # set SEC_USER_AGENT in .env or the EDGAR tool refuses to fetch.
+    sec_user_agent: str = "AI-Investment-Research/0.2 (set SEC_USER_AGENT in .env)"
+
+    # Phase 2 (security) — rate limiting & abuse guards.
+    rate_limit_enabled: bool = True  # set false in tests
+    rate_limit_research: str = "5/minute"       # anonymous-abuse fence on the LLM path
+    rate_limit_login: str = "10/minute"
+    rate_limit_signup: str = "5/minute"
+    rate_limit_run_now: str = "5/minute"        # /summaries/run, /recommendations/run
+    rate_limit_send_now: str = "3/minute"       # /digest/send-now (sends real email)
+    # Global daily budget: process-wide cap on research runs started per UTC
+    # day. Past this, POST /research returns 429 — the real protection against
+    # someone draining the Anthropic/NewsAPI budget (rate limiting is just the
+    # first fence). Set 0 to disable.
+    daily_run_budget: int = 200
+    # Login brute-force lockout: after this many failed logins for one email
+    # within the window, that email's logins return 429 until the window rolls.
+    login_max_failures: int = 10
+    login_lockout_minutes: int = 15
 
     # Phase 4 — background jobs & alert email.
     scheduler_enabled: bool = True  # set false in tests/scripts

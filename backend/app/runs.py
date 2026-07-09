@@ -46,6 +46,14 @@ class RunPoolFull(Exception):
     """
 
 
+class DailyBudgetExceeded(RunPoolFull):
+    """Raised by `start()` once the process's daily run budget is spent.
+
+    Subclasses RunPoolFull so the existing 429 handler covers it; the message
+    tells the caller it's a budget cap, not transient saturation (Phase 2.1).
+    """
+
+
 @dataclass
 class Run:
     run_id: str
@@ -55,6 +63,9 @@ class Run:
     report: FinalReport | None = None
     error: str | None = None
     finished_at: float | None = None  # monotonic-ish wall clock for TTL sweep
+    # Phase 2.4: the user who started the run, or None for anonymous. Runs
+    # started by a logged-in user may only be viewed/answered by that user.
+    user_id: int | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -73,9 +84,30 @@ class RunManager:
         self._pool_lock = threading.Lock()
         self._active = 0    # currently executing agents
         self._pending = 0   # active + queued (submitted, not yet finished)
+        # Phase 2.1 daily spend guard: (utc_date_ordinal, runs_started_today).
+        self._budget_day = 0
+        self._budget_count = 0
 
     def get(self, run_id: str) -> Run | None:
         return self._runs.get(run_id)
+
+    def _charge_daily_budget(self) -> None:
+        """Count one run against today's budget; raise once it's spent.
+
+        Caller holds `self._pool_lock`. Resets automatically at UTC midnight.
+        """
+        budget = settings.daily_run_budget
+        if budget <= 0:
+            return  # disabled
+        today = int(time.time() // 86400)  # UTC day ordinal
+        if today != self._budget_day:
+            self._budget_day = today
+            self._budget_count = 0
+        if self._budget_count >= budget:
+            raise DailyBudgetExceeded(
+                "Daily research budget reached; try again tomorrow."
+            )
+        self._budget_count += 1
 
     def start(
         self,
@@ -83,14 +115,16 @@ class RunManager:
         depth: str | None,
         lens: str | None,
         portfolio_context: dict | None = None,
+        user_id: int | None = None,
     ) -> str:
         with self._pool_lock:
             if self._pending >= self._max_inflight:
                 raise RunPoolFull(
                     "The research queue is full; please retry in a moment."
                 )
+            self._charge_daily_budget()  # raises DailyBudgetExceeded past the cap
         run_id = uuid.uuid4().hex[:12]
-        run = Run(run_id=run_id, ticker=ticker)
+        run = Run(run_id=run_id, ticker=ticker, user_id=user_id)
         events.register(run_id)
         self._runs[run_id] = run
 

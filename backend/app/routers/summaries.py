@@ -22,8 +22,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
+from app.config import settings
 from app.db import get_db
 from app.db_models import StoredReport, User
+from app.ratelimit import RateLimit
 from app.models import FinalReport, StoredReportOut, StoredReportSummary
 from app.summaries import (
     run_summary_for_ticker,
@@ -148,7 +150,11 @@ def create_summaries_router(
             raise HTTPException(status_code=500, detail="Stored report unreadable.")
         return StoredReportOut(**_summary_out(row).model_dump(), report=report)
 
-    @router.post("/summaries/run", status_code=202)
+    @router.post(
+        "/summaries/run",
+        status_code=202,
+        dependencies=[Depends(RateLimit(settings.rate_limit_run_now, "run_now"))],
+    )
     def run_now(
         mode: str = Query(
             "all",

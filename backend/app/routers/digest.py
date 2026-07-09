@@ -6,10 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
+from app.config import settings
 from app.db import get_db
 from app.db_models import EmailDigestPreference, User
 from app.digest import send_digest_for_user
 from app.models import DIGEST_FREQUENCIES, DigestPreferenceIn, DigestPreferenceOut
+from app.ratelimit import RateLimit
 
 router = APIRouter(tags=["digest"])
 
@@ -65,9 +67,13 @@ def put_digest_prefs(
     return _out(pref)
 
 
-@router.post("/digest/send-now")
+@router.post(
+    "/digest/send-now",
+    dependencies=[Depends(RateLimit(settings.rate_limit_send_now, "send_now"))],
+)
 def send_digest_now(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> dict:
     """Send the digest immediately, ignoring the schedule — lets users preview
     what they'll receive (console-logged in dev when SMTP isn't configured)."""

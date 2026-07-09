@@ -161,6 +161,26 @@ without `database is locked`. That is enough for a single node; **beyond one
 node, set `DATABASE_URL` to Postgres** (`postgresql+psycopg://…`) — the swap is
 already wired. Set a real `JWT_SECRET` for anything beyond local development.
 
+### Deploying (Phase 2 — security)
+
+Before putting this on a public URL:
+
+- **`ENV=prod` + a real `JWT_SECRET`.** Outside `dev` the app **refuses to
+  boot** with the shipped default secret or anything under 32 bytes (so a
+  reader of this repo can't forge tokens). Generate one:
+  `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+- **`SEC_USER_AGENT`** must be a real `AppName/version (you@example.com)` —
+  the EDGAR tool refuses to fetch with the placeholder (SEC fair-access).
+- **Rate limits & spend budget** are on by default: per-IP limits on
+  `/research`, `/auth/*`, `/summaries/run`, `/recommendations/run`,
+  `/digest/send-now`, plus a process-wide `DAILY_RUN_BUDGET` cap on research
+  runs and a per-email login lockout. Tune via `.env` (see `.env.example`).
+  Behind a reverse proxy, forward a trustworthy client IP or you rate-limit
+  the proxy itself.
+- **CORS:** set `CORS_ORIGINS` to your real frontend origin — never `*` with
+  credentials. Terminate TLS and add security headers (HSTS,
+  `X-Content-Type-Options`) at the proxy, not in app code.
+
 ### 2. Frontend
 
 ```bash
