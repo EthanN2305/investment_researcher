@@ -192,6 +192,10 @@ job runs automatically at `DAILY_SUMMARY_HOUR_UTC` (default 13:30 UTC).
 
 ```bash
 cd backend
+# The whole suite in one go (pytest also discovers the module-style tests):
+SCHEDULER_ENABLED=false python -m pytest tests/
+
+# …or individually:
 python -m tests.test_smoke      # Phase 1 contract + pipeline
 python -m tests.test_phase2     # planner routing, interrupts, failure isolation
 python -m tests.test_e2e_api    # full HTTP run: SSE + question/answer flow
@@ -199,7 +203,8 @@ python -m pytest tests/test_phase3.py  # auth, CRUD, portfolio agent, personaliz
 python -m pytest tests/test_phase4.py  # watchlist, summaries job, alerts, confidence
 ```
 
-No API keys needed — all tools are faked.
+`pytest` is in `requirements.txt`. No API keys needed — all tools are faked.
+`test_e2e_api` binds port 8899, so keep it free.
 
 ## Roadmap
 

@@ -19,6 +19,7 @@ that runs the pipeline daily for every watched/held ticker.
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,6 +56,16 @@ from app.tools import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Startup wiring runs at import time below (kept there so tests can swap
+    # `main.runs` after import). Shutdown releases the scheduler + run pool.
+    yield
+    if _scheduler is not None:
+        _scheduler.shutdown(wait=False)
+    runs.shutdown()
+
+
 app = FastAPI(
     title="AI Investment Research Analyst — Phase 4",
     version="0.4.0",
@@ -66,6 +77,7 @@ app = FastAPI(
         "configurable alerts with in-app/email notifications, and explainable "
         "confidence scoring."
     ),
+    lifespan=lifespan,
 )
 
 init_db()  # create SQLite tables on boot (idempotent)
@@ -105,14 +117,8 @@ app.include_router(learn_router)
 
 # Phase 4: in-process APScheduler daily-summary job (no broker needed).
 # Phase 1.3: the same scheduler also runs the finished-run eviction sweep.
+# Teardown is handled by the `lifespan` handler defined above.
 _scheduler = start_scheduler(_graph, _prices, run_manager=runs)
-
-
-@app.on_event("shutdown")
-def _shutdown() -> None:
-    if _scheduler is not None:
-        _scheduler.shutdown(wait=False)
-    runs.shutdown()
 
 
 class StartRequest(BaseModel):

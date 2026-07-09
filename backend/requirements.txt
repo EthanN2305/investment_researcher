@@ -17,3 +17,6 @@ apscheduler>=3.10,<4.0
 # Learn-tab narration — free neural TTS (Microsoft Edge voices, no API key).
 # Falls back to macOS `say` if unavailable/offline.
 edge-tts>=6.1.9
+# Tests — test_phase3/test_phase4 use pytest; the rest also run as
+# `python -m tests.<name>`. See README "Running the tests".
+pytest>=8.0
