@@ -376,9 +376,16 @@ def build_narration(pick, brief: dict, duration_sec: int = 30) -> dict:
 
     lines: dict[str, str] = {}
 
-    lines["hook"] = "Alright, let's talk about today's A.I. stock of the day!"
+    # Quiz-style cold open: the visuals show hint chips (sector / size /
+    # momentum) while this plays, so the words tee up the guessing game.
+    sector_hint = details.get("sector")
+    lines["hook"] = (
+        "Can you guess today's A.I. stock of the day? "
+        + (f"Here's a hint — it's a {sector_hint} name!" if sector_hint
+           else "Here are your hints!")
+    )
 
-    lines["ticker"] = f"Today's pick? It's {t}!"
+    lines["ticker"] = f"It's {t}!"
     if pick.price:
         lines["ticker"] += f" Trading around {pick.price:,.0f} dollars right now."
 
@@ -413,8 +420,8 @@ def build_narration(pick, brief: dict, duration_sec: int = 30) -> dict:
 
     if pick.momentum_3mo is not None:
         lines["momentum"] = (
-            f"Now check this out — it's {'up' if up else 'down'} about {move} "
-            "percent over the last three months!")
+            f"Check out this chart — it's {'up' if up else 'down'} about "
+            f"{move} percent over the last three months!")
         if long:
             lines["momentum"] += (
                 f" Its technical screen score? A solid {pick.screen_score:.0f} "
@@ -422,12 +429,33 @@ def build_narration(pick, brief: dict, duration_sec: int = 30) -> dict:
     else:
         lines["momentum"] = ""
 
-    if news:
+    # The news beat: tell the story (what happened + why it moves the price)
+    # when the LLM analysis is available; otherwise read the top headline as
+    # before. The sentiment beat only exists alongside an analysis — with no
+    # analysis the scene is dropped from the video entirely.
+    analysis = brief.get("news_analysis") or {}
+    stories = analysis.get("stories") or []
+    if stories:
+        s0 = stories[0]
+        lines["news"] = f"Here's the big story. {s0['what_happened']}"
+        if s0.get("price_impact"):
+            lines["news"] += f" {s0['price_impact']}"
+        if long and len(stories) > 1:
+            lines["news"] += f" Also in the news: {stories[1]['what_happened']}"
+    elif news:
         lines["news"] = f"And in the headlines: {news[0]['title']}."
         if long and len(news) > 1:
             lines["news"] += f" Plus, {news[1]['title']}."
     else:
         lines["news"] = ""
+
+    if stories:
+        label = analysis.get("sentiment_label") or "mixed"
+        lines["sentiment"] = f"So what's the mood? {label}."
+        if analysis.get("consumer_take"):
+            lines["sentiment"] += f" {analysis['consumer_take']}"
+    else:
+        lines["sentiment"] = ""
 
     why = _stance_why(pick.stance, t)
     if long:

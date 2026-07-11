@@ -222,3 +222,45 @@ def test_price_history_downsamples_and_pins_events(monkeypatch):
     assert len(h["events"]) == 1                    # empty date skipped
     ev = h["events"][0]
     assert h["points"][ev["i"]]["d"] >= "2026-05-15"
+
+
+# --- narration beats ------------------------------------------------------------
+
+def _brief(with_analysis=True):
+    return {
+        "details": {"name": "Micron", "sector": "Technology",
+                    "about": "Micron makes memory chips.",
+                    "about_short": "Micron makes memory chips.",
+                    "market_cap": "$120.00B", "range_pos": 80},
+        "news": [{"title": "Chipmaker beats on Q2 earnings",
+                  "source": "Reuters", "when": "1d ago"}],
+        "reasons": [],
+        "news_analysis": dict(ANALYSIS) if with_analysis else {},
+        "price_history": {},
+    }
+
+
+def test_narration_quiz_hook_and_sentiment_beat():
+    lines = learn_brief.build_narration(_pick(), _brief(), 30)
+    assert lines["hook"].startswith("Can you guess")
+    assert "sentiment" in lines
+    assert "Leaning bullish" in lines["sentiment"]
+    assert "Retail is hyped." in lines["sentiment"]
+    # The news beat tells the story, not just a headline.
+    assert "Revenue of $8.1B beat estimates." in lines["news"]
+    assert "Beats usually push the stock higher." in lines["news"]
+
+
+def test_narration_without_analysis_falls_back():
+    lines = learn_brief.build_narration(_pick(), _brief(with_analysis=False), 30)
+    assert "sentiment" not in lines            # scene will be skipped entirely
+    assert "Chipmaker beats on Q2 earnings" in lines["news"]  # old headline read
+
+
+def test_narration_long_cut_adds_second_story():
+    brief = _brief()
+    brief["news_analysis"]["stories"] = list(brief["news_analysis"]["stories"]) + [{
+        "headline": "New fab announced", "what_happened": "A new fab is planned.",
+        "price_impact": "", "sentiment": "positive", "date": "2026-07-09"}]
+    lines = learn_brief.build_narration(_pick(), brief, 65)
+    assert "A new fab is planned." in lines["news"]
