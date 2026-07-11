@@ -864,6 +864,111 @@ function DetailsScene({ details = {}, duration = 126 }) {
   );
 }
 
+// The real 3-month price line (downsampled server-side), drawn on progressively
+// with 📰 pins where the analyzed stories broke — so the "check out this chart"
+// narration points at actual price action, not a decorative squiggle.
+// MomentumScene (abstract bars) remains the fallback when history is missing.
+function PriceChartScene({ history, momentum3mo, screenScore, duration = 150 }) {
+  const frame = useCurrentFrame();
+  const points = history.points;
+  const events = history.events || [];
+  const pctVal = (momentum3mo ?? 0) * 100;
+  const up = pctVal >= 0;
+  const color = up ? C.green : C.red;
+  const W = 900;
+  const H = 460;
+  const closes = points.map((p) => p.c);
+  const min = Math.min(...closes);
+  const span = Math.max(...closes) - min || 1;
+  const draw = interpolate(frame - 14, [0, 50], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.out(Easing.cubic),
+  });
+  const shown = Math.max(2, Math.ceil(points.length * draw));
+  const xy = (i) => [
+    (i / (points.length - 1)) * W,
+    H - ((points[i].c - min) / span) * (H - 40) - 20,
+  ];
+  const coords = points.slice(0, shown).map((_, i) => xy(i));
+  const line = coords.map((c) => c.join(",")).join(" ");
+  const area = `${line} ${coords[coords.length - 1][0]},${H} 0,${H}`;
+  const [hx, hy] = coords[coords.length - 1];
+
+  return (
+    <Scene durationInFrames={duration}>
+      <Kicker>THE LAST 3 MONTHS</Kicker>
+      <Pop delay={4}>
+        <div style={{ fontSize: 130, fontWeight: 900, color, margin: "10px 0 4px" }}>
+          <AnimatedNumber
+            value={pctVal}
+            delay={10}
+            format={(v) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`}
+          />
+        </div>
+      </Pop>
+      <Pop delay={10} from={60}>
+        <svg width={W} height={H} style={{ overflow: "visible", marginTop: 8 }}>
+          <polygon points={area} fill={`${color}1d`} />
+          <polyline
+            points={line}
+            fill="none"
+            stroke={color}
+            strokeWidth="7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ filter: `drop-shadow(0 0 18px ${color}88)` }}
+          />
+          <circle
+            cx={hx}
+            cy={hy}
+            r="13"
+            fill={color}
+            style={{ filter: `drop-shadow(0 0 20px ${color})` }}
+          />
+          {events.map((e, idx) => {
+            const i = Math.min(e.i ?? 0, points.length - 1);
+            if (i >= shown) return null; // pin appears as the line reaches it
+            const [x, y] = xy(i);
+            return (
+              <g key={idx}>
+                <line
+                  x1={x} y1={y} x2={x} y2={y - 52}
+                  stroke={C.accentSoft} strokeWidth="3" strokeDasharray="4 6"
+                />
+                <text x={x} y={y - 62} fontSize="44" textAnchor="middle">
+                  📰
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </Pop>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          width: W,
+          fontSize: 30,
+          color: C.muted,
+          marginTop: 10,
+        }}
+      >
+        <span>{points[0].d}</span>
+        <span>{points[points.length - 1].d}</span>
+      </div>
+      <Pop delay={44}>
+        <p style={{ fontSize: 42, color: C.muted, marginTop: 40 }}>
+          Technical screen score:{" "}
+          <span style={{ color: C.text, fontWeight: 800 }}>
+            {screenScore != null ? screenScore.toFixed(1) : "—"}
+          </span>
+        </p>
+      </Pop>
+    </Scene>
+  );
+}
+
 function MomentumScene({ momentum3mo, screenScore, duration = 180 }) {
   const frame = useCurrentFrame();
   const pctVal = (momentum3mo ?? 0) * 100;
@@ -1288,13 +1393,21 @@ export default function StockVideo({
     ),
     about: <AboutScene ticker={ticker} details={details} duration={T.about} />,
     details: <DetailsScene details={details} duration={T.details} />,
-    momentum: (
-      <MomentumScene
-        momentum3mo={momentum_3mo}
-        screenScore={screen_score}
-        duration={T.momentum}
-      />
-    ),
+    momentum:
+      price_history.points && price_history.points.length > 1 ? (
+        <PriceChartScene
+          history={price_history}
+          momentum3mo={momentum_3mo}
+          screenScore={screen_score}
+          duration={T.momentum}
+        />
+      ) : (
+        <MomentumScene
+          momentum3mo={momentum_3mo}
+          screenScore={screen_score}
+          duration={T.momentum}
+        />
+      ),
     news: <NewsScene news={news} duration={T.news} />,
     sentiment: <Scene durationInFrames={T.sentiment ?? 120} />,
     why: (
