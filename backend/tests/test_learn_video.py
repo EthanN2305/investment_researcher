@@ -139,3 +139,86 @@ def test_analyze_news_unusable_stories_returns_none():
     out = learn_news.analyze_news("MU", None, None, None, NEWS,
                                   client=_fake_client(empty, calls), today=TODAY)
     assert out is None
+
+
+# --- learn_brief: API budget + price history ----------------------------------
+
+from app import learn_brief
+from app.models import PriceHistory
+
+ANALYSIS = {
+    "stories": [{
+        "headline": "Chipmaker beats on Q2 earnings",
+        "what_happened": "Revenue of $8.1B beat estimates.",
+        "price_impact": "Beats usually push the stock higher.",
+        "sentiment": "positive",
+        "date": "2026-07-10",
+    }],
+    "sentiment_score": 0.6,
+    "sentiment_label": "Leaning bullish",
+    "consumer_take": "Retail is hyped.",
+}
+
+
+def _pick(ticker="MU"):
+    return SimpleNamespace(
+        ticker=ticker, price=100.0, momentum_3mo=0.22, screen_score=8.0,
+        stance="bullish", confidence=0.7, rank=1, summary="Strong setup.")
+
+
+@pytest.fixture(autouse=True)
+def _fresh_brief_cache():
+    learn_brief.clear_brief_cache()
+    yield
+    learn_brief.clear_brief_cache()
+
+
+def test_build_brief_fetches_news_once_and_memoizes(monkeypatch):
+    calls = {"news": 0}
+
+    def fake_get_news(ticker, limit=8):
+        calls["news"] += 1
+        assert limit == 8
+        return NEWS
+
+    monkeypatch.setattr(learn_brief._NEWS, "get_news", fake_get_news)
+    monkeypatch.setattr(learn_brief, "stock_details",
+                        lambda t, p: {"name": "Micron", "sector": "Technology"})
+    monkeypatch.setattr(learn_brief.learn_news, "analyze_news",
+                        lambda *a, **k: dict(ANALYSIS))
+    monkeypatch.setattr(learn_brief, "price_history",
+                        lambda t, d: {"points": [], "events": []})
+
+    b1 = learn_brief.build_brief(_pick())
+    b2 = learn_brief.build_brief(_pick())
+    assert calls["news"] == 1               # ONE NewsAPI call, brief memoized
+    assert b1 is b2
+    assert b1["news_analysis"]["stories"]
+    assert b1["news"][0]["title"] == "Chipmaker beats on Q2 earnings"
+
+
+def test_build_brief_survives_all_providers_down(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(learn_brief._NEWS, "get_news", boom)
+    monkeypatch.setattr(learn_brief._MARKET, "get_market_data", boom)
+    monkeypatch.setattr(learn_brief._HISTORY, "get_history", boom)
+    b = learn_brief.build_brief(_pick("AMD"))
+    assert b["news"] == [] and b["news_analysis"] == {} and b["price_history"] == {}
+    assert b["reasons"]                     # deterministic reasons still there
+
+
+def test_price_history_downsamples_and_pins_events(monkeypatch):
+    dates = [f"2026-{4 + i // 30:02d}-{i % 30 + 1:02d}" for i in range(90)]
+    closes = [100.0 + i for i in range(90)]
+    monkeypatch.setattr(
+        learn_brief._HISTORY, "get_history",
+        lambda t, period="3mo": PriceHistory(ticker=t, dates=dates,
+                                             closes=closes))
+    h = learn_brief.price_history("MU", ["2026-05-15", ""])
+    assert 2 <= len(h["points"]) <= 61
+    assert h["points"][-1]["d"] == dates[-1]        # last close always kept
+    assert len(h["events"]) == 1                    # empty date skipped
+    ev = h["events"][0]
+    assert h["points"][ev["i"]]["d"] >= "2026-05-15"

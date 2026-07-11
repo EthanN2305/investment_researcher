@@ -18,16 +18,20 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+import threading
+from datetime import date, datetime, timezone
 
+from app import learn_news
 from app.tools.market_data import YFinanceMarketData
 from app.tools.news import NewsAPINews
+from app.tools.prices import YFinancePriceHistory
 
 logger = logging.getLogger(__name__)
 
-# Instantiated lazily and reused (both tools cache internally).
+# Instantiated lazily and reused (all tools cache internally).
 _MARKET = YFinanceMarketData()
 _NEWS = NewsAPINews()
+_HISTORY = YFinancePriceHistory()
 
 
 # --- formatting helpers ------------------------------------------------------
@@ -154,14 +158,18 @@ def stock_details(ticker: str, price: float | None) -> dict:
 
 # --- recent news -------------------------------------------------------------
 
-def recent_news(ticker: str, limit: int = 3) -> list[dict]:
-    """Most-recent headlines, trimmed for on-screen use. Best-effort."""
+def fetch_news(ticker: str, limit: int = 8) -> list:
+    """The ONE news fetch per brief — shared by the headline cards and the
+    LLM analysis so the NewsAPI budget stays at a single call. Best-effort."""
     try:
-        items = _NEWS.get_news(ticker, limit=max(limit, 6))
+        return _NEWS.get_news(ticker, limit=limit)
     except Exception as exc:  # noqa: BLE001
         logger.info("learn brief: news unavailable for %s: %s", ticker, exc)
         return []
 
+
+def news_cards(items: list, limit: int = 3) -> list[dict]:
+    """Most-recent headlines, trimmed for on-screen use. Pure — no fetching."""
     # Prefer dated, most-recent articles; keep only what fits nicely on screen.
     dated = sorted(
         items,
@@ -180,6 +188,37 @@ def recent_news(ticker: str, limit: int = 3) -> list[dict]:
             "when": _time_ago(n.published_at),
         })
     return out
+
+
+# --- price history -------------------------------------------------------------
+
+def price_history(ticker: str, story_dates: list[str]) -> dict:
+    """Real 3-month closes for the chart scene, downsampled to ≤60 points,
+    with each analyzed story's date pinned to the nearest sampled point so
+    the video can mark where the news broke. Best-effort: {} on any failure."""
+    try:
+        hist = _HISTORY.get_history(ticker, period="3mo")
+    except Exception as exc:  # noqa: BLE001
+        logger.info("learn brief: price history unavailable for %s: %s",
+                    ticker, exc)
+        return {}
+    dates, closes = hist.dates, hist.closes
+    if len(closes) < 2:
+        return {}
+    n = len(closes)
+    step = max(1, (n + 59) // 60)
+    idx = list(range(0, n, step))
+    if idx[-1] != n - 1:  # the latest close is the story — always keep it
+        idx.append(n - 1)
+    points = [{"d": dates[i], "c": round(closes[i], 2)} for i in idx]
+    events = []
+    for d in story_dates:
+        if not d:
+            continue
+        pos = next((j for j, p in enumerate(points) if p["d"] >= d), None)
+        events.append({"i": pos if pos is not None else len(points) - 1,
+                       "d": d})
+    return {"points": points, "events": events}
 
 
 # --- "why the AI picked it" reasons ------------------------------------------
@@ -243,13 +282,48 @@ def why_reasons(pick, details: dict | None = None) -> list[dict]:
 
 # --- the full brief ----------------------------------------------------------
 
-def build_brief(pick, want_news: bool = True) -> dict:
+# One brief per (ticker, day): /learn/stock-of-the-day, /learn/shuffle,
+# /learn/voiceover and /learn/render all reuse it, so the day's upstream
+# budget stays at 1 news fetch + 1 history fetch + ≤1 LLM call. Entries from
+# previous days are pruned on insert, so this holds at most ~10 tickers.
+_BRIEF_CACHE: dict[tuple[str, str], dict] = {}
+_BRIEF_LOCK = threading.Lock()
+
+
+def clear_brief_cache() -> None:
+    """Test hook — wipe the per-day brief cache."""
+    with _BRIEF_LOCK:
+        _BRIEF_CACHE.clear()
+
+
+def build_brief(pick) -> dict:
     """Assemble everything the richer video needs. `pick` is a
     StockOfTheDayOut (or anything with the same attributes)."""
+    key = (pick.ticker.strip().upper(), date.today().isoformat())
+    with _BRIEF_LOCK:
+        cached = _BRIEF_CACHE.get(key)
+    if cached is not None:
+        return cached
+
     details = stock_details(pick.ticker, pick.price)
-    news = recent_news(pick.ticker) if want_news else []
-    reasons = why_reasons(pick, details)
-    return {"details": details, "news": news, "reasons": reasons}
+    items = fetch_news(pick.ticker)
+    analysis = learn_news.analyze_news(
+        pick.ticker, details.get("name"), pick.price, pick.momentum_3mo,
+        items) or {}
+    history = price_history(
+        pick.ticker, [s.get("date") for s in analysis.get("stories", [])])
+    brief = {
+        "details": details,
+        "news": news_cards(items),
+        "reasons": why_reasons(pick, details),
+        "news_analysis": analysis,
+        "price_history": history,
+    }
+    with _BRIEF_LOCK:
+        _BRIEF_CACHE[key] = brief
+        for stale in [k for k in _BRIEF_CACHE if k[1] != key[1]]:
+            del _BRIEF_CACHE[stale]
+    return brief
 
 
 # --- narration script --------------------------------------------------------
