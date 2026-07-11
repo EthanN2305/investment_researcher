@@ -263,6 +263,41 @@ function Punch({ delay = 0, children, style }) {
   );
 }
 
+// A one-shot ring of emoji flying out from a point — cheap celebratory punch
+// for the big numbers (momentum %, confidence %). Deterministic, no randomness.
+function EmojiBurst({ emoji = "🔥", delay = 0, count = 6, top = "36%" }) {
+  const frame = useCurrentFrame();
+  const t = interpolate(frame - delay, [0, 42], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.out(Easing.cubic),
+  });
+  if (t <= 0) return null;
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {Array.from({ length: count }).map((_, i) => {
+        const a = (i / count) * Math.PI * 2 - Math.PI / 2;
+        const r = t * (170 + (i % 3) * 70);
+        return (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              left: `calc(50% + ${Math.cos(a) * r}px)`,
+              top: `calc(${top} + ${Math.sin(a) * r * 0.7}px)`,
+              fontSize: 56,
+              opacity: 1 - t,
+              transform: `scale(${0.6 + t * 0.8})`,
+            }}
+          >
+            {emoji}
+          </div>
+        );
+      })}
+    </AbsoluteFill>
+  );
+}
+
 // Scene wrapper: scales/fades in on entry and fades out over its last frames,
 // so cuts feel like transitions rather than hard jumps.
 function Scene({ durationInFrames, fade = 12, children }) {
@@ -440,17 +475,20 @@ function CaptionTrack({ windows }) {
       >
         {words.map((w, i) => {
           const lit = revealLocal >= i * per;
+          const active = lit && revealLocal < (i + 1) * per;
           return (
             <span
               key={i}
               style={{
                 opacity: lit ? 1 : 0.28,
-                color: lit ? C.text : C.muted,
-                transition: "opacity 0.1s",
+                color: active ? C.accentSoft : lit ? C.text : C.muted,
+                display: "inline-block",
+                transform: active ? "scale(1.14)" : "scale(1)",
+                transition: "opacity 0.1s, transform 0.1s, color 0.1s",
               }}
             >
               {w}
-              {i < words.length - 1 ? " " : ""}
+              {i < words.length - 1 ? " " : ""}
             </span>
           );
         })}
@@ -898,6 +936,7 @@ function PriceChartScene({ history, momentum3mo, screenScore, duration = 150 }) 
   return (
     <Scene durationInFrames={duration}>
       <Kicker>THE LAST 3 MONTHS</Kicker>
+      <EmojiBurst emoji={up ? "🔥" : "🥶"} delay={12} top="30%" />
       <Pop delay={4}>
         <div style={{ fontSize: 130, fontWeight: 900, color, margin: "10px 0 4px" }}>
           <AnimatedNumber
@@ -978,6 +1017,7 @@ function MomentumScene({ momentum3mo, screenScore, duration = 180 }) {
   return (
     <Scene durationInFrames={duration}>
       <Kicker>3-MONTH MOMENTUM</Kicker>
+      <EmojiBurst emoji={up ? "🔥" : "🥶"} delay={12} top="30%" />
       <Pop delay={6}>
         <div style={{ fontSize: 170, fontWeight: 900, color, margin: "20px 0" }}>
           <AnimatedNumber
@@ -1376,6 +1416,7 @@ function ConfidenceScene({ confidence, rank, duration = 150 }) {
   return (
     <Scene durationInFrames={duration}>
       <Kicker>AGENT CONFIDENCE</Kicker>
+      <EmojiBurst emoji="🤖" delay={16} top="34%" />
       <Pop delay={6}>
         <div style={{ position: "relative", width: 520, height: 520, marginTop: 20 }}>
           <svg width="520" height="520" viewBox="0 0 520 520">
