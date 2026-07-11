@@ -264,3 +264,26 @@ def test_narration_long_cut_adds_second_story():
         "price_impact": "", "sentiment": "positive", "date": "2026-07-09"}]
     lines = learn_brief.build_narration(_pick(), brief, 65)
     assert "A new fab is planned." in lines["news"]
+
+
+# --- router threading ------------------------------------------------------------
+
+from app.routers import learn as learn_router
+
+
+def test_to_out_threads_analysis_and_history(monkeypatch):
+    brief = _brief()
+    brief["price_history"] = {"points": [{"d": "2026-07-10", "c": 100.0}] * 2,
+                              "events": []}
+    monkeypatch.setattr(learn_router, "build_brief", lambda pick: brief)
+    item = SimpleNamespace(
+        ticker="MU", rank=1, price=100.0, screen_score=8.0, momentum_3mo=0.22,
+        stance="bullish", confidence=0.7, summary="s", run_id="r1")
+    out = learn_router._to_out(item, date(2026, 7, 11), enrich=True)
+    assert out.news_analysis["stories"]
+    assert out.price_history["points"]
+    assert "sentiment" in out.captions
+
+
+def test_cache_version_bumped():
+    assert learn_router._CACHE_VERSION == "v6"

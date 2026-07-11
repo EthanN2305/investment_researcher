@@ -50,7 +50,7 @@ _RENDER_TIMEOUT_S = 15 * 60
 _ALLOWED_DURATIONS = (30, 65)  # seconds: 30s and 1m05s
 # Bump when the narration script, voice, or composition changes so stale cached
 # voiceover clips / MP4s are bypassed instead of reused.
-_CACHE_VERSION = "v5"  # v5: switch to Edge neural voice (human, Siri-grade)
+_CACHE_VERSION = "v6"  # v6: quiz hook, real chart, news deep-dive + sentiment
 
 
 class StockOfTheDayOut(BaseModel):
@@ -73,6 +73,8 @@ class StockOfTheDayOut(BaseModel):
     news: list = []         # recent headlines: [{title, source, when}]
     reasons: list = []      # why the AI picked it: [{icon, label, text}]
     captions: dict = {}     # per-scene narration text (subtitles)
+    news_analysis: dict = {}  # LLM news deep-dive: stories + sentiment gauge
+    price_history: dict = {}  # real 3-mo closes + news-event pins for the chart
 
 
 class VoiceoverOut(BaseModel):
@@ -270,6 +272,8 @@ def _to_out(
         out.news = brief["news"]
         out.reasons = brief["reasons"]
         out.captions = build_narration(out, brief, 30)
+        out.news_analysis = brief["news_analysis"]
+        out.price_history = brief["price_history"]
     return out
 
 
@@ -315,6 +319,7 @@ def _make_voiceover(pick: StockOfTheDayOut, duration_sec: int) -> dict:
     try:
         brief = {
             "details": pick.details, "news": pick.news, "reasons": pick.reasons,
+            "news_analysis": pick.news_analysis,
         }
         narration = build_narration(pick, brief, duration_sec)
         out_dir = _VOICE_DIR / _voice_key(pick, duration_sec)
@@ -362,6 +367,8 @@ def _run_render(
     pick.details = brief["details"]
     pick.news = brief["news"]
     pick.reasons = brief["reasons"]
+    pick.news_analysis = brief["news_analysis"]
+    pick.price_history = brief["price_history"]
     captions = build_narration(pick, brief, duration_sec)
     voice = _make_voiceover(pick, duration_sec)
 
@@ -379,6 +386,8 @@ def _run_render(
         "details": pick.details,
         "news": pick.news,
         "reasons": pick.reasons,
+        "news_analysis": pick.news_analysis,
+        "price_history": pick.price_history,
         "captions": captions,
         "voice": voice,
     }
