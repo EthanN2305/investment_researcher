@@ -240,6 +240,29 @@ function SlideIn({ delay = 0, dir = -1, children, style }) {
   );
 }
 
+// Zoom-punch: starts oversized-and-invisible, slams to rest with overshoot —
+// the classic short-form "reveal" hit. Heavier spring than Pop on purpose.
+function Punch({ delay = 0, children, style }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const s = spring({
+    frame: frame - delay,
+    fps,
+    config: { damping: 10, stiffness: 210, mass: 0.7 },
+  });
+  return (
+    <div
+      style={{
+        opacity: Math.min(1, s * 2),
+        transform: `scale(${0.4 + s * 0.6})`,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 // Scene wrapper: scales/fades in on entry and fades out over its last frames,
 // so cuts feel like transitions rather than hard jumps.
 function Scene({ durationInFrames, fade = 12, children }) {
@@ -438,32 +461,55 @@ function CaptionTrack({ windows }) {
 
 // --- Scenes ------------------------------------------------------------------
 
-function HookScene({ dateLabel, duration = 90 }) {
+// Short-form cold open: tease the pick as a guessing game. Three hint chips
+// (sector / size / momentum) deal in over a blurred mystery ticker, and the
+// answer lands in the next scene — a classic retention hook.
+function capBucket(cap) {
+  if (!cap || cap === "—") return null;
+  if (cap.endsWith("T")) return "Trillion-dollar giant";
+  if (cap.endsWith("B")) return "Multi-billion-dollar company";
+  return "Smaller cap";
+}
+
+function HookScene({ dateLabel, details = {}, momentum3mo, duration = 90 }) {
   const frame = useCurrentFrame();
   const flash = interpolate(frame, [0, 6, 20], [0, 1, 0], {
     extrapolateRight: "clamp",
   });
-  const pulse = 1 + Math.sin(frame / 6) * 0.03;
+  const pulse = 1 + Math.sin(frame / 6) * 0.04;
+  const hints = [
+    details.sector && { icon: "🏭", text: details.sector },
+    capBucket(details.market_cap) && {
+      icon: "💰",
+      text: capBucket(details.market_cap),
+    },
+    momentum3mo != null && {
+      icon: momentum3mo >= 0 ? "📈" : "📉",
+      text: `${momentum3mo >= 0 ? "Up" : "Down"} ${Math.abs(
+        momentum3mo * 100
+      ).toFixed(0)}% in 3 months`,
+    },
+  ].filter(Boolean);
+
   return (
     <Scene durationInFrames={duration}>
       <AbsoluteFill style={{ background: `rgba(47,129,255,${flash * 0.18})` }} />
       <Pop>
-        <div style={{ fontSize: 78, transform: `scale(${pulse})` }}>⚡</div>
+        <div style={{ fontSize: 74, transform: `scale(${pulse})` }}>🤔</div>
       </Pop>
       <Pop delay={4}>
         <h1
           style={{
-            fontSize: 132,
+            fontSize: 108,
             fontWeight: 900,
-            lineHeight: 1.02,
-            margin: "24px 0 0",
+            lineHeight: 1.04,
+            margin: "20px 0 0",
             letterSpacing: -3,
           }}
         >
-          STOCK
+          CAN YOU GUESS
           <br />
-          OF THE
-          <br />
+          TODAY'S{" "}
           <span
             style={{
               background: `linear-gradient(90deg, ${C.accent}, ${C.green})`,
@@ -471,12 +517,61 @@ function HookScene({ dateLabel, duration = 90 }) {
               color: "transparent",
             }}
           >
-            DAY
+            AI PICK?
           </span>
         </h1>
       </Pop>
-      <Pop delay={14}>
-        <p style={{ fontSize: 44, color: C.muted, marginTop: 46 }}>
+      <Pop delay={12} from={40}>
+        <div
+          style={{
+            marginTop: 40,
+            padding: "18px 56px",
+            borderRadius: 24,
+            background: C.card,
+            border: `1px solid ${C.cardBorder}`,
+            fontSize: 100,
+            fontWeight: 900,
+            letterSpacing: 10,
+            color: C.accentSoft,
+            filter: "blur(14px)",
+          }}
+        >
+          $????
+        </div>
+      </Pop>
+      {hints.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 18,
+            marginTop: 44,
+          }}
+        >
+          {hints.map((h, i) => (
+            <SlideIn key={h.text} delay={20 + i * 10} dir={i % 2 === 0 ? -1 : 1}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  padding: "18px 30px",
+                  borderRadius: 999,
+                  background: C.card,
+                  border: `1px solid ${C.cardBorder}`,
+                  fontSize: 38,
+                  fontWeight: 700,
+                }}
+              >
+                <span style={{ fontSize: 40 }}>{h.icon}</span>
+                <span>HINT {i + 1}: {h.text}</span>
+              </div>
+            </SlideIn>
+          ))}
+        </div>
+      )}
+      <Pop delay={40}>
+        <p style={{ fontSize: 38, color: C.muted, marginTop: 42 }}>
           {dateLabel} · picked by AI agents
         </p>
       </Pop>
@@ -484,13 +579,12 @@ function HookScene({ dateLabel, duration = 90 }) {
   );
 }
 
-function TickerScene({ ticker, price, stance, name, momentum3mo, duration = 150 }) {
+function TickerScene({ ticker, price, stance, name, duration = 150 }) {
   const color = stanceColor(stance);
-  const up = (momentum3mo ?? 0) >= 0;
   return (
     <Scene durationInFrames={duration}>
-      <Kicker>TODAY'S PICK</Kicker>
-      <Pop delay={6}>
+      <Kicker>THE REVEAL</Kicker>
+      <Punch delay={4}>
         <h1
           style={{
             fontSize: ticker.length > 4 ? 200 : 260,
@@ -502,7 +596,7 @@ function TickerScene({ ticker, price, stance, name, momentum3mo, duration = 150 
         >
           ${ticker}
         </h1>
-      </Pop>
+      </Punch>
       {name && (
         <Pop delay={12}>
           <p style={{ fontSize: 40, color: C.muted, margin: "6px 0 0" }}>
@@ -513,11 +607,6 @@ function TickerScene({ ticker, price, stance, name, momentum3mo, duration = 150 
       <Pop delay={16}>
         <div style={{ fontSize: 96, fontWeight: 800, marginTop: 26 }}>
           <AnimatedNumber value={price ?? 0} delay={16} format={money} />
-        </div>
-      </Pop>
-      <Pop delay={22} from={30}>
-        <div style={{ marginTop: 30 }}>
-          <Sparkline up={up} delay={24} />
         </div>
       </Pop>
       <Pop delay={26}>
@@ -539,46 +628,6 @@ function TickerScene({ ticker, price, stance, name, momentum3mo, duration = 150 
         </div>
       </Pop>
     </Scene>
-  );
-}
-
-// A little animated line chart used behind the ticker reveal — direction and
-// tint follow 3-month momentum, so the visual matches the story.
-function Sparkline({ up = true, width = 620, height = 150, delay = 0 }) {
-  const frame = useCurrentFrame();
-  const color = up ? C.green : C.red;
-  // Deterministic jagged-but-trending series (no randomness → stable renders).
-  const seed = [0.15, 0.28, 0.22, 0.44, 0.38, 0.62, 0.55, 0.8, 0.74, 1];
-  const pts = seed.map((v) => (up ? v : 1 - v));
-  const n = pts.length;
-  const draw = interpolate(frame - delay, [0, 34], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
-  });
-  const shown = Math.max(2, Math.round(n * draw));
-  const coords = pts.slice(0, shown).map((v, i) => {
-    const x = (i / (n - 1)) * width;
-    const y = height - v * (height - 16) - 8;
-    return [x, y];
-  });
-  const line = coords.map((c) => c.join(",")).join(" ");
-  const area = `${line} ${coords[coords.length - 1][0]},${height} 0,${height}`;
-  const [hx, hy] = coords[coords.length - 1];
-  return (
-    <svg width={width} height={height} style={{ overflow: "visible" }}>
-      <polygon points={area} fill={`${color}22`} />
-      <polyline
-        points={line}
-        fill="none"
-        stroke={color}
-        strokeWidth="6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{ filter: `drop-shadow(0 0 16px ${color}88)` }}
-      />
-      <circle cx={hx} cy={hy} r="12" fill={color} style={{ filter: `drop-shadow(0 0 18px ${color})` }} />
-    </svg>
   );
 }
 
@@ -1220,14 +1269,20 @@ export default function StockVideo({
   });
 
   const sceneEl = {
-    hook: <HookScene dateLabel={date_label} duration={T.hook} />,
+    hook: (
+      <HookScene
+        dateLabel={date_label}
+        details={details}
+        momentum3mo={momentum_3mo}
+        duration={T.hook}
+      />
+    ),
     ticker: (
       <TickerScene
         ticker={ticker}
         price={price}
         stance={stance}
         name={details && details.name}
-        momentum3mo={momentum_3mo}
         duration={T.ticker}
       />
     ),
