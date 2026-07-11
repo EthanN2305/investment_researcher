@@ -108,8 +108,17 @@ def short_summary(report: FinalReport) -> str:
         n = sum(len(r.claims) for r in report.agent_reports)
         return f"{n} claims gathered across {len(report.agent_reports)} agents."
     sentences = re.split(r"(?<=[.!?])\s+", text)
-    out = " ".join(sentences[:_SHORT_SUMMARY_SENTENCES])
-    return out[:_SHORT_SUMMARY_CHARS]
+    out = ""
+    for sentence in sentences[:_SHORT_SUMMARY_SENTENCES]:
+        candidate = f"{out} {sentence}" if out else sentence
+        if len(candidate) > _SHORT_SUMMARY_CHARS:
+            break
+        out = candidate
+    if out:
+        return out
+    # Even the first sentence overflows: cut at a word boundary instead.
+    head = text[:_SHORT_SUMMARY_CHARS - 1].rsplit(" ", 1)[0]
+    return head.rstrip(" ,;:—-") + "…"
 
 
 def run_pipeline_headless(

@@ -374,6 +374,40 @@ def test_short_summary_fallback_when_llm_summary_empty():
     assert "2 claims" in short_summary(report)
 
 
+def test_short_summary_never_cuts_mid_sentence():
+    # Three sentences whose total length crosses the 500-char cap: the
+    # over-budget third sentence must be dropped whole, not chopped mid-word.
+    s1 = "Stance: cautiously bullish on momentum with valuation caveats."
+    s2 = ("Primary driver: the technicals agent shows a strong uptrend with "
+          "the stock above both its 50-day and 200-day moving averages, "
+          "up 69.7% over three months, indicating powerful positive momentum "
+          "that has persisted through several earnings cycles this year.")
+    s3 = ("Supporting evidence: RSI14 sits at a neutral 50, suggesting the "
+          "rally is not currently overbought and may have room to continue "
+          "even though the valuation agent flags a rich price-to-earnings "
+          "multiple relative to peers and history (technicals, confidence "
+          "0.82; valuation, confidence 0.61).")
+    report = _report()
+    report.recommendation.summary = f"{s1} {s2} {s3}"
+    out = short_summary(report)
+    assert len(out) <= 500
+    assert out == f"{s1} {s2}"  # whole sentences only
+
+
+def test_short_summary_word_boundary_when_first_sentence_too_long():
+    # A single sentence longer than the cap can't keep a full sentence, so it
+    # must end cleanly on a word boundary with an ellipsis.
+    words = "momentum valuation liquidity catalysts " * 40  # ~1560 chars
+    report = _report()
+    report.recommendation.summary = words.strip() + "."
+    out = short_summary(report)
+    assert len(out) <= 500
+    assert out.endswith("…")
+    # No mid-word cut: everything before the ellipsis is a whole word.
+    assert out[:-1].split()[-1] in {"momentum", "valuation", "liquidity",
+                                    "catalysts"}
+
+
 # --- Alert evaluation (pure logic) ---------------------------------------------------
 def test_price_move_alert_fires_on_threshold():
     report = _report()
