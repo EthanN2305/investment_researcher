@@ -1030,6 +1030,84 @@ function MomentumScene({ momentum3mo, screenScore, duration = 180 }) {
   );
 }
 
+// The news deep-dive: one story told in three beats — headline, what happened,
+// and how it likely hits the price (colored by the story's sentiment). Falls
+// back to NewsScene's plain headline cards when there's no LLM analysis.
+function BigStoryScene({ analysis, long = false, duration = 150 }) {
+  const stories = analysis.stories || [];
+  const s0 = stories[0];
+  const dir =
+    s0.sentiment === "positive"
+      ? { color: C.green, arrow: "▲" }
+      : s0.sentiment === "negative"
+      ? { color: C.red, arrow: "▼" }
+      : { color: C.amber, arrow: "◆" };
+
+  const card = {
+    padding: "28px 34px",
+    borderRadius: 24,
+    background: C.card,
+    border: `1px solid ${C.cardBorder}`,
+    textAlign: "left",
+    width: 920,
+  };
+
+  return (
+    <Scene durationInFrames={duration}>
+      <Kicker>THE BIG STORY</Kicker>
+      <div style={{ display: "flex", flexDirection: "column", gap: 24, marginTop: 40 }}>
+        <SlideIn delay={8} dir={-1}>
+          <div style={{ ...card, display: "flex", gap: 22, alignItems: "flex-start" }}>
+            <div style={{ fontSize: 46, lineHeight: 1 }}>📰</div>
+            <div>
+              <p style={{ fontSize: 44, fontWeight: 800, margin: 0, lineHeight: 1.24 }}>
+                {s0.headline}
+              </p>
+              {s0.date && (
+                <p style={{ fontSize: 28, color: C.muted, margin: "10px 0 0" }}>
+                  {s0.date}
+                </p>
+              )}
+            </div>
+          </div>
+        </SlideIn>
+        <SlideIn delay={28} dir={1}>
+          <div style={card}>
+            <p style={{ fontSize: 32, color: C.accentSoft, fontWeight: 800, margin: 0, letterSpacing: 2 }}>
+              WHAT HAPPENED
+            </p>
+            <p style={{ fontSize: 40, fontWeight: 600, margin: "10px 0 0", lineHeight: 1.32 }}>
+              {s0.what_happened}
+            </p>
+          </div>
+        </SlideIn>
+        {s0.price_impact && (
+          <SlideIn delay={48} dir={-1}>
+            <div style={{ ...card, borderLeft: `10px solid ${dir.color}` }}>
+              <p style={{ fontSize: 32, color: dir.color, fontWeight: 800, margin: 0, letterSpacing: 2 }}>
+                PRICE IMPACT {dir.arrow}
+              </p>
+              <p style={{ fontSize: 40, fontWeight: 600, margin: "10px 0 0", lineHeight: 1.32 }}>
+                {s0.price_impact}
+              </p>
+            </div>
+          </SlideIn>
+        )}
+        {long && stories[1] && (
+          <SlideIn delay={68} dir={1}>
+            <div style={{ ...card, padding: "20px 30px" }}>
+              <p style={{ fontSize: 32, color: C.muted, margin: 0, lineHeight: 1.3 }}>
+                <span style={{ color: C.accentSoft, fontWeight: 800 }}>ALSO:</span>{" "}
+                {stories[1].headline}
+              </p>
+            </div>
+          </SlideIn>
+        )}
+      </div>
+    </Scene>
+  );
+}
+
 function NewsScene({ news = [], duration = 138 }) {
   if (!news.length) {
     return (
@@ -1082,6 +1160,89 @@ function NewsScene({ news = [], duration = 138 }) {
           </SlideIn>
         ))}
       </div>
+    </Scene>
+  );
+}
+
+// News-mood gauge: a red→amber→green half-dial whose needle springs to the
+// LLM's overall sentiment score, with the consumer/retail take underneath.
+// Only mounted when an analysis exists (sceneOrderFor drops it otherwise).
+function SentimentScene({ analysis, duration = 140 }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const score = Math.max(-1, Math.min(1, analysis.sentiment_score ?? 0));
+  const s = spring({
+    frame: frame - 12,
+    fps,
+    config: { damping: 12, stiffness: 70, mass: 1.1 },
+  });
+  // Needle sweeps from hard-bearish (-90°) to its target as the spring lands.
+  const angle = interpolate(s, [0, 1], [-90, score * 90]);
+  const scoreColor = score > 0.15 ? C.green : score < -0.15 ? C.red : C.amber;
+  const R = 300;
+  const CX = 330;
+  const CY = 350;
+
+  return (
+    <Scene durationInFrames={duration}>
+      <Kicker>NEWS SENTIMENT</Kicker>
+      <Pop delay={6}>
+        <svg width="660" height="410" style={{ marginTop: 26, overflow: "visible" }}>
+          <defs>
+            <linearGradient id="sentGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor={C.red} />
+              <stop offset="50%" stopColor={C.amber} />
+              <stop offset="100%" stopColor={C.green} />
+            </linearGradient>
+          </defs>
+          <path
+            d={`M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`}
+            fill="none"
+            stroke="url(#sentGrad)"
+            strokeWidth="42"
+            strokeLinecap="round"
+            opacity="0.92"
+          />
+          <g transform={`rotate(${angle} ${CX} ${CY})`}>
+            <line
+              x1={CX} y1={CY} x2={CX} y2={CY - R + 64}
+              stroke={C.text} strokeWidth="11" strokeLinecap="round"
+              style={{ filter: `drop-shadow(0 0 14px ${scoreColor})` }}
+            />
+            <circle cx={CX} cy={CY} r="22" fill={C.text} />
+          </g>
+          <text x={CX - R} y={CY + 52} fontSize="30" fill={C.muted} textAnchor="middle">
+            BEARISH
+          </text>
+          <text x={CX + R} y={CY + 52} fontSize="30" fill={C.muted} textAnchor="middle">
+            BULLISH
+          </text>
+        </svg>
+      </Pop>
+      <Pop delay={30}>
+        <h2 style={{ fontSize: 76, fontWeight: 900, margin: "20px 0 0", color: scoreColor }}>
+          {analysis.sentiment_label || "Mixed"}
+        </h2>
+      </Pop>
+      {analysis.consumer_take && (
+        <Pop delay={44} from={40}>
+          <div
+            style={{
+              marginTop: 36,
+              maxWidth: 900,
+              padding: "26px 36px",
+              borderRadius: 26,
+              background: C.card,
+              border: `1px solid ${C.cardBorder}`,
+              fontSize: 40,
+              lineHeight: 1.34,
+              fontWeight: 600,
+            }}
+          >
+            💬 {analysis.consumer_take}
+          </div>
+        </Pop>
+      )}
     </Scene>
   );
 }
@@ -1408,8 +1569,15 @@ export default function StockVideo({
           duration={T.momentum}
         />
       ),
-    news: <NewsScene news={news} duration={T.news} />,
-    sentiment: <Scene durationInFrames={T.sentiment ?? 120} />,
+    news:
+      news_analysis.stories && news_analysis.stories.length ? (
+        <BigStoryScene analysis={news_analysis} long={long} duration={T.news} />
+      ) : (
+        <NewsScene news={news} duration={T.news} />
+      ),
+    sentiment: (
+      <SentimentScene analysis={news_analysis} duration={T.sentiment ?? 120} />
+    ),
     why: (
       <WhyScene
         reasons={reasons}
