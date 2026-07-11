@@ -157,7 +157,11 @@ export default function LearnPanel() {
   const isDaily = daily && pick && pick.ticker === daily.ticker;
   // Length follows the narration (scenes stretch to fit the voice), so the
   // preview's frame count must account for the active voiceover too.
-  const frames = videoDurationInFrames(duration, voiceOn ? voice : null);
+  const frames = videoDurationInFrames(
+    duration,
+    voiceOn ? voice : null,
+    pick?.news_analysis
+  );
 
   if (loading) {
     return (
@@ -217,6 +221,8 @@ export default function LearnPanel() {
               details: pick.details || {},
               news: pick.news || [],
               reasons: pick.reasons || [],
+              news_analysis: pick.news_analysis || {},
+              price_history: pick.price_history || {},
               captions:
                 (voiceOn && voice?.captions) || pick.captions || {},
               voice: voiceOn ? voice : null,

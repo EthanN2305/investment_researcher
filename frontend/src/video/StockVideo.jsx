@@ -27,11 +27,21 @@ export const FPS = 30;
 export const DURATION_OPTIONS = [30, 65]; // seconds: 30s and 1m05s
 
 // Scene order (drives layout + the caption/audio track). "about" — what the
-// company actually does — sits right after the ticker reveal.
+// company actually does — sits right after the ticker reveal; "sentiment"
+// (the news-mood gauge) only exists when the LLM news analysis came back, so
+// the order is computed per-video via sceneOrderFor().
 const SCENE_ORDER = [
-  "hook", "ticker", "about", "details", "momentum", "news", "why",
-  "confidence", "outro",
+  "hook", "ticker", "about", "details", "momentum", "news", "sentiment",
+  "why", "confidence", "outro",
 ];
+
+const hasAnalysis = (analysis) =>
+  Boolean(analysis && analysis.stories && analysis.stories.length);
+
+export const sceneOrderFor = (analysis) =>
+  hasAnalysis(analysis)
+    ? SCENE_ORDER
+    : SCENE_ORDER.filter((id) => id !== "sentiment");
 
 // Minimum on-screen time per scene (frames) — enough for the animation to land
 // and be read even when there's no voiceover. When narration IS present, the
@@ -40,12 +50,12 @@ const SCENE_ORDER = [
 // in; the real runtime follows the narration, so nothing is hard-capped.
 const MIN_BUDGET = {
   30: {
-    hook: 70, ticker: 96, about: 120, details: 116, momentum: 120,
-    news: 116, why: 132, confidence: 96, outro: 66,
+    hook: 84, ticker: 88, about: 108, details: 100, momentum: 116,
+    news: 128, sentiment: 104, why: 120, confidence: 90, outro: 62,
   },
   65: {
-    hook: 96, ticker: 140, about: 200, details: 170, momentum: 170,
-    news: 190, why: 220, confidence: 150, outro: 120,
+    hook: 110, ticker: 132, about: 190, details: 160, momentum: 170,
+    news: 210, sentiment: 160, why: 210, confidence: 144, outro: 116,
   },
 };
 
@@ -62,10 +72,10 @@ const clipFramesFor = (voice, id) => {
 
 // Per-scene frame counts. Each scene lasts at least its visual floor, and at
 // least long enough to contain its narration clip (+ lead-in + tail-out).
-export function sceneDurations(sec = 30, voice = null) {
+export function sceneDurations(sec = 30, voice = null, analysis = null) {
   const base = MIN_BUDGET[sec] ?? MIN_BUDGET[30];
   const out = {};
-  for (const id of SCENE_ORDER) {
+  for (const id of sceneOrderFor(analysis)) {
     let dur = base[id] ?? 120;
     const audio = clipFramesFor(voice, id);
     if (audio != null) dur = Math.max(dur, audio + LEAD_IN + TAIL_OUT);
@@ -74,10 +84,11 @@ export function sceneDurations(sec = 30, voice = null) {
   return out;
 }
 
-export const timelineFor = (sec, voice = null) => sceneDurations(sec, voice);
+export const timelineFor = (sec, voice = null, analysis = null) =>
+  sceneDurations(sec, voice, analysis);
 
-export const videoDurationInFrames = (sec, voice = null) =>
-  Object.values(sceneDurations(sec, voice)).reduce((a, b) => a + b, 0);
+export const videoDurationInFrames = (sec, voice = null, analysis = null) =>
+  Object.values(sceneDurations(sec, voice, analysis)).reduce((a, b) => a + b, 0);
 
 // Back-compat: the classic 30s length (no voiceover floor).
 export const DURATION_IN_FRAMES = videoDurationInFrames(30);
@@ -1177,24 +1188,27 @@ export default function StockVideo({
   details = {},
   news = [],
   reasons = [],
+  news_analysis = {},
+  price_history = {},
   captions = {},
   voice = null,
 }) {
   const long = duration_sec >= 65;
-  const T = sceneDurations(duration_sec, voice);
+  const order = sceneOrderFor(news_analysis);
+  const T = sceneDurations(duration_sec, voice, news_analysis);
 
   // Walk the timeline once, tracking each scene's absolute frame window so the
   // caption track and per-scene audio line up exactly with the visuals.
   let cursor = 0;
   const windows = {};
-  for (const id of SCENE_ORDER) {
+  for (const id of order) {
     windows[id] = { from: cursor, dur: T[id] };
     cursor += T[id];
   }
 
   // Captions reveal in step with the narration clip (lead-in + spoken length)
   // when we have it, so subtitles track the voice precisely.
-  const captionWindows = SCENE_ORDER.map((id) => {
+  const captionWindows = order.map((id) => {
     const audio = clipFramesFor(voice, id);
     return {
       from: windows[id].from,
@@ -1227,6 +1241,7 @@ export default function StockVideo({
       />
     ),
     news: <NewsScene news={news} duration={T.news} />,
+    sentiment: <Scene durationInFrames={T.sentiment ?? 120} />,
     why: (
       <WhyScene
         reasons={reasons}
@@ -1250,7 +1265,7 @@ export default function StockVideo({
       <Background />
       <ProgressBar />
       <BrandTag />
-      {SCENE_ORDER.map((id) => (
+      {order.map((id) => (
         <Sequence key={id} from={windows[id].from} durationInFrames={windows[id].dur}>
           {sceneEl[id]}
           <SceneAudio voice={voice} id={id} delay={LEAD_IN} />

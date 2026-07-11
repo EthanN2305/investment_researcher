@@ -25,7 +25,8 @@ export function RemotionRoot() {
         // is hard-capped — see sceneDurations in StockVideo.
         durationInFrames: videoDurationInFrames(
           props.duration_sec ?? 30,
-          props.voice ?? null
+          props.voice ?? null,
+          props.news_analysis ?? null
         ),
       })}
     />
